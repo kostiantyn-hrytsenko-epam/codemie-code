@@ -14,8 +14,9 @@ export class AiderAdapter implements AgentAdapter {
       // Install via pip
       await exec('pip', ['install', 'aider-chat'], { timeout: 120000 });
       logger.success('Aider installed successfully');
-    } catch (error: any) {
-      throw new Error(`Failed to install Aider: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to install Aider: ${errorMessage}`);
     }
   }
 
@@ -24,8 +25,9 @@ export class AiderAdapter implements AgentAdapter {
     try {
       await exec('pip', ['uninstall', '-y', 'aider-chat']);
       logger.success('Aider uninstalled successfully');
-    } catch (error: any) {
-      throw new Error(`Failed to uninstall Aider: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to uninstall Aider: ${errorMessage}`);
     }
   }
 

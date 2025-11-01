@@ -2,7 +2,6 @@ import { Command } from 'commander';
 import { CodeMieCode } from '../code/index';
 import { logger } from '../utils/logger';
 import { createMCPCommand } from './commands/mcp';
-import chalk from 'chalk';
 
 export async function createCLI(): Promise<Command> {
   const program = new Command();
@@ -32,7 +31,7 @@ export async function createCLI(): Promise<Command> {
         await assistant.initialize();
         await assistant.startInteractive();
         await assistant.dispose();
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Failed to start CodeMie Code:', error);
         process.exit(1);
       }
@@ -50,7 +49,7 @@ export async function createCLI(): Promise<Command> {
         await assistant.initialize({ showTips: false });
         await assistant.executeNonInteractive(task);
         await assistant.dispose();
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Failed to execute task:', error);
         process.exit(1);
       }
@@ -64,7 +63,7 @@ export async function createCLI(): Promise<Command> {
       try {
         await CodeMieCode.testConnection();
         process.exit(0);
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Connection test failed:', error);
         process.exit(1);
       }
@@ -91,7 +90,7 @@ export async function createCLI(): Promise<Command> {
         await assistant.initialize();
         await assistant.startInteractive();
         await assistant.dispose();
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Failed to start CodeMie Code:', error);
         process.exit(1);
       }

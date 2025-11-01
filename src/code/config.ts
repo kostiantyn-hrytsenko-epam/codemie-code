@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
-import { ConfigurationError } from '../utils/errors';
-import { loadAIConfig, detectProvider, ModelProvider } from '../utils/env-mapper';
+import { ConfigurationError, getErrorMessage } from '../utils/errors.js';
+import { loadAIConfig, detectProvider, ModelProvider } from '../utils/env-mapper.js';
 
 dotenv.config();
 
@@ -21,8 +21,8 @@ export function loadConfig(workingDir?: string): CodeMieConfig {
   let aiConfig;
   try {
     aiConfig = loadAIConfig();
-  } catch (error: any) {
-    throw new ConfigurationError(error.message);
+  } catch (error: unknown) {
+    throw new ConfigurationError(getErrorMessage(error));
   }
 
   // Detect provider from model

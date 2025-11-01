@@ -19,7 +19,7 @@ export interface ContentChunkEvent {
 export interface ToolCallStartEvent {
   type: 'tool_call_start';
   toolName: string;
-  toolArgs: Record<string, any>;
+  toolArgs: Record<string, unknown>;
 }
 
 export interface ToolCallResultEvent {

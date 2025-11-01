@@ -1,10 +1,11 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { StructuredTool } from '@langchain/core/tools';
-import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
+import { HumanMessage, BaseMessage } from '@langchain/core/messages';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
-import { CodeMieConfig } from './config';
-import { SYSTEM_PROMPT } from './prompts';
-import { AgentEvent, AgentEventCallback } from './agent-events';
+import { CodeMieConfig } from './config.js';
+import { SYSTEM_PROMPT } from './prompts.js';
+import type { AgentEventCallback } from './agent-events.js';
+import { getErrorMessage } from '../utils/errors.js';
 
 export interface AgentMessage {
   role: 'user' | 'assistant';
@@ -14,7 +15,7 @@ export interface AgentMessage {
 export class CodeMieAgent {
   private model: ChatOpenAI;
   private tools: StructuredTool[];
-  private agent: any; // LangGraph agent
+  private agent: ReturnType<typeof createReactAgent>;
   private conversationHistory: BaseMessage[] = [];
 
   constructor(config: CodeMieConfig, tools: StructuredTool[]) {
@@ -36,7 +37,7 @@ export class CodeMieAgent {
     // Override the default invocation params to remove top_p
     // This prevents Bedrock errors about both temperature and top_p being set
     const originalInvocationParams = this.model.invocationParams.bind(this.model);
-    this.model.invocationParams = function(options?: any) {
+    this.model.invocationParams = function(options?:Record<string,unknown>) {
       const params = originalInvocationParams(options);
       // Remove top_p if present to avoid Bedrock conflicts
       if ('top_p' in params) {
@@ -57,27 +58,21 @@ export class CodeMieAgent {
     // Add user message to history
     this.conversationHistory.push(new HumanMessage(userMessage));
 
-    try {
-      // Invoke agent with conversation history
-      const result = await this.agent.invoke(
-        { messages: this.conversationHistory },
-        { recursionLimit: 200 }
-      );
+    // Invoke agent with conversation history
+    const result = await this.agent.invoke(
+      { messages: this.conversationHistory },
+      { recursionLimit: 200 }
+    );
 
-      // Extract final response from agent output
-      const messages = result.messages || [];
-      const lastMessage = messages[messages.length - 1];
-      const response = lastMessage?.content || '';
+    // Extract final response from agent output
+    const messages = result.messages || [];
+    const lastMessage = messages[messages.length - 1];
+    const response = lastMessage?.content || '';
 
-      // Update conversation history with all messages from agent
-      this.conversationHistory = messages;
+    // Update conversation history with all messages from agent
+    this.conversationHistory = messages;
 
-      return response;
-
-    } catch (error: any) {
-      // Re-throw original error without wrapping
-      throw error;
-    }
+    return response;
   }
 
   async chatStream(userMessage: string, onEvent: AgentEventCallback, signal?: AbortSignal): Promise<void> {
@@ -142,7 +137,7 @@ export class CodeMieAgent {
           for (const msg of messages) {
             // Tool message contains the result
             if (msg.content) {
-              const toolName = (msg as any).name || 'unknown';
+              const toolName = (msg as Record<string, unknown>).name as string || 'unknown';
               onEvent({
                 type: 'tool_call_result',
                 toolName: toolName,
@@ -162,10 +157,11 @@ export class CodeMieAgent {
 
       onEvent({ type: 'complete' });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Don't emit error event for cancellations - already handled by 'cancelled' event
-      if (error.message !== 'Execution cancelled by user') {
-        onEvent({ type: 'error', error: error.message });
+      const errorMsg = getErrorMessage(error);
+      if (errorMsg !== 'Execution cancelled by user') {
+        onEvent({ type: 'error', error: errorMsg });
       }
       throw error; // Re-throw original error without wrapping
     }

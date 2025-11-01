@@ -40,7 +40,7 @@ export function createListCommand(): Command {
         if (!options.installed && !process.env.CODEMIE_IN_ASSISTANT) {
           tipDisplay.showRandomTip();
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Failed to list agents:', error);
         process.exit(1);
       }

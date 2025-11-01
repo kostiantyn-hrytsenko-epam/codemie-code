@@ -2,8 +2,8 @@ import { StructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { createUnifiedDiff } from './diff-utils';
-import { PathSecurityError } from '../../utils/errors';
+import { createUnifiedDiff } from './diff-utils.js';
+import { PathSecurityError, getErrorMessage } from '../../utils/errors.js';
 
 export interface FilesystemConfig {
   allowedDirectories: string[];
@@ -43,7 +43,7 @@ export class FilesystemTools {
 abstract class BaseFilesystemTool extends StructuredTool {
   abstract name: string;
   abstract description: string;
-  abstract schema: z.ZodObject<any>;
+  abstract schema: z.ZodObject<z.ZodRawShape>;
 
   constructor(protected config: FilesystemConfig) {
     super();
@@ -80,7 +80,7 @@ abstract class BaseFilesystemTool extends StructuredTool {
       }
 
       return realPath;
-    } catch (error: any) {
+    } catch {
       // File doesn't exist yet, validate parent
       const parent = path.dirname(absolute);
       try {
@@ -120,8 +120,8 @@ class ReadFileTool extends BaseFilesystemTool {
       const validated = await this.validatePath(filePath);
       const content = await fs.readFile(validated, 'utf-8');
       return content;
-    } catch (error: any) {
-      return `Error reading file: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error reading file: ${getErrorMessage(error)}`;
     }
   }
 }
@@ -141,8 +141,8 @@ class ReadMultipleFilesTool extends BaseFilesystemTool {
         const validated = await this.validatePath(filePath);
         const content = await fs.readFile(validated, 'utf-8');
         results.push(`${filePath}:\n${content}\n`);
-      } catch (error: any) {
-        results.push(`${filePath}: Error - ${error.message}`);
+      } catch (error: unknown) {
+        results.push(`${filePath}: Error - ${getErrorMessage(error)}`);
       }
     }
     return results.join('\n---\n');
@@ -164,8 +164,8 @@ class WriteFileTool extends BaseFilesystemTool {
       await fs.mkdir(path.dirname(validated), { recursive: true });
       await fs.writeFile(validated, content, 'utf-8');
       return `Successfully wrote to ${filePath}`;
-    } catch (error: any) {
-      return `Error writing file: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error writing file: ${getErrorMessage(error)}`;
     }
   }
 }
@@ -231,8 +231,8 @@ class EditFileTool extends BaseFilesystemTool {
       }
 
       return diff;
-    } catch (error: any) {
-      return `Error editing file: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error editing file: ${getErrorMessage(error)}`;
     }
   }
 
@@ -285,8 +285,8 @@ class CreateDirectoryTool extends BaseFilesystemTool {
       const validated = await this.validatePath(dirPath);
       await fs.mkdir(validated, { recursive: true });
       return `Successfully created directory ${dirPath}`;
-    } catch (error: any) {
-      return `Error creating directory: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error creating directory: ${getErrorMessage(error)}`;
     }
   }
 }
@@ -310,8 +310,8 @@ class ListDirectoryTool extends BaseFilesystemTool {
       });
 
       return formatted.length > 0 ? formatted.join('\n') : 'Empty directory';
-    } catch (error: any) {
-      return `Error listing directory: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error listing directory: ${getErrorMessage(error)}`;
     }
   }
 }
@@ -331,8 +331,8 @@ class ProjectTreeTool extends BaseFilesystemTool {
 
       const files = await this.collectFiles(validated, validated);
       return JSON.stringify(files, null, 2);
-    } catch (error: any) {
-      return `Error generating project tree: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error generating project tree: ${getErrorMessage(error)}`;
     }
   }
 
@@ -358,7 +358,7 @@ class ProjectTreeTool extends BaseFilesystemTool {
           files.push(relativePath);
         }
       }
-    } catch (error) {
+    } catch {
       // Skip directories we can't read
     }
 
@@ -383,8 +383,8 @@ class MoveFileTool extends BaseFilesystemTool {
       await fs.mkdir(path.dirname(validatedDest), { recursive: true });
       await fs.rename(validatedSource, validatedDest);
       return `Successfully moved ${source} to ${destination}`;
-    } catch (error: any) {
-      return `Error moving file: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error moving file: ${getErrorMessage(error)}`;
     }
   }
 }
@@ -425,8 +425,8 @@ class SearchFilesTool extends BaseFilesystemTool {
       );
 
       return results.length > 0 ? results.join('\n') : 'No matches found';
-    } catch (error: any) {
-      return `Error searching: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error searching: ${getErrorMessage(error)}`;
     }
   }
 
@@ -465,7 +465,7 @@ class SearchFilesTool extends BaseFilesystemTool {
           }
         }
       }
-    } catch (error) {
+    } catch {
       // Skip directories we can't read
     }
 

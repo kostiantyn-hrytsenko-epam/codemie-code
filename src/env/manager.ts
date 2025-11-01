@@ -15,7 +15,7 @@ export class EnvManager {
     try {
       const content = await fs.readFile(EnvManager.CONFIG_FILE, 'utf-8');
       return JSON.parse(content);
-    } catch (error) {
+    } catch {
       return {};
     }
   }
@@ -29,7 +29,7 @@ export class EnvManager {
         'utf-8'
       );
       logger.success(`Configuration saved to ${EnvManager.CONFIG_FILE}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Failed to save configuration:', error);
       throw error;
     }

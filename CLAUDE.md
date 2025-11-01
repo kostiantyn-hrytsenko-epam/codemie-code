@@ -21,14 +21,12 @@ npm run build              # Compile TypeScript and copy assets (to dist/)
 npm run dev                # Watch mode for development
 
 # Testing
-npm test                   # Run all tests with Jest
+npm test                   # Run all tests (Node.js native test runner)
 npm run test:watch         # Run tests in watch mode
-npm run test:coverage      # Run tests with coverage report
 
-# Manual integration tests (not part of npm test)
-node tests/test-agent-direct.js
-node tests/test-streaming.js
-node tests/test-ui-state.js
+# Run individual test files
+node --test tests/agent-direct.test.mjs
+node --test tests/streaming.test.mjs
 
 # Code Quality
 npm run lint               # Check code style with ESLint
@@ -39,15 +37,37 @@ npm run build && npm link  # Build and link for testing
 codemie doctor             # Verify installation and configuration
 ```
 
+## Core Principles
+
+**ALWAYS follow these fundamental principles:**
+
+### KISS (Keep It Simple, Stupid)
+- Write simple, straightforward code that's easy to understand
+- Avoid over-engineering and unnecessary complexity
+- Remove redundant code, scripts, and configuration
+- If something can be done in fewer lines/steps, do it
+- Question every piece of complexity - is it truly needed?
+
+### DRY (Don't Repeat Yourself)
+- Never duplicate code, logic, or configuration
+- Extract common patterns into reusable functions/utilities
+- Reuse existing utilities from `src/utils/` before creating new ones
+- If you find yourself copying code, refactor it into a shared function
+- One source of truth for each piece of knowledge
+
+**Remember:** Simple, clean code is better than clever, complex code.
+
 ## Critical Policies
 
 ### Testing & Documentation Policy
 
-**IMPORTANT - Do NOT write or run tests unless explicitly requested:**
+**IMPORTANT - Do NOT write tests, documentation, or summaries unless explicitly requested:**
 - Do NOT write tests unless user explicitly says: "Write tests", "Create unit tests", etc.
 - Do NOT run tests unless user explicitly says: "Run the tests", "Execute test suite", etc.
-- Do NOT generate documentation unless explicitly requested
+- Do NOT generate documentation unless user explicitly says: "Write documentation", "Create docs", etc.
+- Do NOT write summaries unless user explicitly says: "Summarize", "Write a summary", etc.
 - Do NOT run compilation checks unless explicitly requested
+- Do NOT proactively create README files or documentation files
 
 ### Node Modules Policy
 
@@ -63,6 +83,44 @@ codemie doctor             # Verify installation and configuration
 1. Check if similar functionality exists in `src/utils/` directory
 2. Always reuse existing utilities (logger, exec, errors, tips, etc.)
 3. If implementing new shared utilities, get user approval first
+
+### Git Workflow Policy
+
+**IMPORTANT - Always use feature branches:**
+- NEVER commit directly to `main` branch
+- ALWAYS create a feature branch for changes
+- Follow standard git branch naming conventions:
+  - `feature/add-something` - New features
+  - `fix/issue-description` - Bug fixes
+  - `docs/update-readme` - Documentation changes
+  - `refactor/component-name` - Code refactoring
+  - `chore/update-dependencies` - Maintenance tasks
+
+**Standard workflow:**
+```bash
+# 1. Create feature branch from main
+git checkout main
+git pull origin main
+git checkout -b feature/your-feature-name
+
+# 2. Make changes and commit
+git add .
+git commit -m "Descriptive commit message"
+
+# 3. Push branch to remote
+git push -u origin feature/your-feature-name
+
+# 4. Create Pull Request for review
+# Use GitHub UI or gh CLI to create PR
+
+# 5. After PR approval, merge to main
+```
+
+**Branch naming guidelines:**
+- Use lowercase with hyphens
+- Be descriptive but concise
+- Include ticket/issue number if applicable (e.g., `feature/GH-123-add-feature`)
+- Keep branch names under 50 characters when possible
 
 ## Reference Implementations
 
@@ -216,7 +274,7 @@ codemie-code/
 ## Technology Stack
 
 - **Language**: TypeScript (ES2022, NodeNext modules)
-- **Runtime**: Node.js >= 18.0.0
+- **Runtime**: Node.js >= 24.0.0 (LTS Krypton)
 - **Package Manager**: npm
 - **LLM Framework**: LangChain 1.x (`@langchain/core`, `@langchain/langgraph`, `@langchain/openai`)
 - **LLM Provider**: LiteLLM (OpenAI-compatible proxy)
@@ -403,27 +461,134 @@ Located in `src/utils/errors.ts`:
 
 ## Testing Approach
 
-- Unit tests use Jest (configured in package.json with ts-jest)
-- Integration tests are manual Node.js scripts in `tests/`
-- Test agent behavior with `tests/test-agent-direct.js`
-- Test streaming with `tests/test-streaming.js`
-- Test UI with `tests/test-ui-state.js`
+### Test Framework & Structure
+
+- Uses **Node.js native test runner** (`node:test`)
+- All test files are located in `tests/` directory
+- Test files use `.mjs` extension (ES modules)
+- Tests are built using `describe()`, `it()`, `before()`, and `after()` from `node:test`
+
+### Test Categories
+
+1. **Agent Tests** - Test LLM agent functionality (requires base URL configuration)
+   - `agent-direct.test.mjs` - Direct agent tool calling
+   - `agent-output.test.mjs` - Agent output format
+   - `streaming.test.mjs` - Streaming functionality
+   - `conversation-flow.test.mjs` - Multiple question handling
+
+2. **Integration Tests** - Test `codemie-code` (AI assistant) (requires base URL configuration)
+   - `codemie-code.test.mjs` - CodeMieCode tool calling
+   - `tool-count.test.mjs` - Tool loading verification
+   - `interactive-simulation.test.mjs` - Interactive conversation simulation
+   - `ui-state.test.mjs` - UI state management
+   - `live-output.test.mjs` - Live output format
+
+3. **MCP Tests** - Test MCP server integration with AI assistant (requires base URL configuration)
+   - `mcp-context7.test.mjs` - Context7 MCP server
+   - `mcp-time-server.test.mjs` - Time MCP server
+   - `mcp-e2e.test.mjs` - End-to-end MCP integration
+   - `context7-only.test.mjs` - Context7 server only
+
+4. **UI/Format Tests** - Test formatting and UI logic (does NOT require base URL)
+   - `ui-format.test.mjs` - UI formatting
+   - `text-wrapping.test.mjs` - Text wrapping logic
+
+5. **CLI Wrapper Tests** - Test `codemie` CLI commands (does NOT require base URL)
+   - Currently no tests exist for CLI commands (`codemie doctor`, `codemie list`, etc.)
+   - These commands don't interact with LLM, so they don't need base URL configuration
+
+### Test Helpers
+
+The `tests/test-helpers.mjs` file provides utilities for managing test preconditions:
+
+**Key Functions:**
+
+```javascript
+// Check if base URL is configured
+isBaseUrlConfigured()
+
+// Skip test if base URL is not configured (with warning)
+skipIfNoBaseUrl(testContext, customMessage?)
+
+// Get list of missing environment variables
+getMissingEnvVars()
+
+// Check if all required environment variables are configured
+isFullyConfigured()
+
+// Print configuration status for debugging
+printConfigStatus()
+```
+
+**Usage Example:**
+
+```javascript
+import { describe, it, before } from 'node:test';
+import { skipIfNoBaseUrl } from './test-helpers.mjs';
+
+describe('My Test Suite', () => {
+  before(() => {
+    if (skipIfNoBaseUrl()) return;
+    // ... setup code
+  });
+
+  it('should do something', () => {
+    if (skipIfNoBaseUrl()) return;
+    // ... test code
+  });
+});
+```
+
+### Environment Variable Requirements
+
+Tests that interact with LLM agents require one of:
+- `CODEMIE_BASE_URL`
+- `ANTHROPIC_BASE_URL`
+- `OPENAI_BASE_URL`
+
+If these are not set, tests will be **skipped with a warning** instead of failing.
 
 ### Running Tests
 
 ```bash
-# Run all Jest tests
+# Run all tests
 npm test
 
+# Run tests in watch mode
+npm run test:watch
+
 # Run specific test file
-npm test -- path/to/test
+node --test tests/agent-direct.test.mjs
 
-# Run with coverage
-npm run test:coverage
+# Run tests without base URL (will skip LLM tests)
+unset CODEMIE_BASE_URL ANTHROPIC_BASE_URL OPENAI_BASE_URL
+npm test
 
-# Run manual integration tests
-node tests/test-streaming.js
+# Run tests with debug output
+CODEMIE_DEBUG=true npm test
 ```
+
+### Writing New Tests
+
+**For tests requiring LLM interaction:**
+
+1. Import test helpers: `import { skipIfNoBaseUrl } from './test-helpers.mjs'`
+2. Add skip checks to `before()` hooks: `before(() => { if (skipIfNoBaseUrl()) return; ... })`
+3. Add skip checks to each test: `it('test name', () => { if (skipIfNoBaseUrl()) return; ... })`
+
+**For tests NOT requiring LLM interaction:**
+
+1. No need to import or use test helpers
+2. Tests will run regardless of environment configuration
+
+### Test Best Practices
+
+- **Always build before testing**: Run `npm run build` to ensure dist/ is up to date
+- **Use descriptive test names**: Clearly state what is being tested
+- **Clean up resources**: Use `after()` hooks to dispose of resources (agents, MCP tools, etc.)
+- **Test isolation**: Each test should be independent and not rely on state from other tests
+- **Mock external dependencies**: When possible, avoid hitting real external services
+- **Handle async properly**: Use `async/await` for asynchronous operations
 
 ## Debugging
 

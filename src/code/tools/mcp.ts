@@ -1,6 +1,7 @@
 import { StructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { MultiServerMCPClient } from '@langchain/mcp-adapters';
+import { getErrorMessage } from '../../utils/errors.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -20,7 +21,7 @@ export class MCPTools {
     this.enabledServers = serversToUse;
 
     // Initialize MCP client with error handling for individual servers
-    const serverConfigs: Record<string, any> = {};
+    const serverConfigs: Record<string, unknown> = {};
     const failedServers: string[] = [];
 
     for (const serverName of serversToUse) {
@@ -33,7 +34,7 @@ export class MCPTools {
     }
 
     if (Object.keys(serverConfigs).length > 0) {
-      this.mcpClient = new MultiServerMCPClient(serverConfigs);
+      this.mcpClient = new MultiServerMCPClient(serverConfigs as any);
       // Note: MultiServerMCPClient connects automatically when getting tools
     }
 
@@ -53,15 +54,15 @@ export class MCPTools {
       const mcpTools = await this.mcpClient.getTools();
 
       // Wrap MCP tools with metadata
-      return mcpTools.map((tool: any) => new WrappedMCPTool(tool));
-    } catch (error: any) {
-      console.warn(`Failed to load MCP tools: ${error.message}`);
+      return mcpTools.map((tool) => new WrappedMCPTool(tool as StructuredTool));
+    } catch (error: unknown) {
+      console.warn(`Failed to load MCP tools: ${getErrorMessage(error)}`);
       return [];
     }
   }
 
-  private async loadMCPConfigs(): Promise<Record<string, any>> {
-    const configs: Record<string, any> = {};
+  private async loadMCPConfigs(): Promise<Record<string, unknown>> {
+    const configs: Record<string, unknown> = {};
     let hasGlobalServers = false;
 
     // Load from global config (~/.codemie/config.json)
@@ -72,7 +73,7 @@ export class MCPTools {
         Object.assign(configs, globalConfig.mcpServers);
         hasGlobalServers = true;
       }
-    } catch (error) {
+    } catch {
       // No global config
     }
 
@@ -90,17 +91,20 @@ export class MCPTools {
             }
           }
         }
-      } catch (error) {
+      } catch {
         // No bundled config
       }
     }
 
     // Inject environment variables into configs
-    for (const config of Object.values(configs) as any[]) {
-      if (config.env) {
-        for (const [key, value] of Object.entries(config.env)) {
-          if (typeof value === 'string' && value.includes('${')) {
-            config.env[key] = this.interpolateEnvVars(value);
+    for (const config of Object.values(configs)) {
+      if (typeof config === 'object' && config !== null && 'env' in config) {
+        const env = (config as { env: Record<string, unknown> }).env;
+        if (env && typeof env === 'object') {
+          for (const [key, value] of Object.entries(env)) {
+            if (typeof value === 'string' && value.includes('${')) {
+              env[key] = this.interpolateEnvVars(value);
+            }
           }
         }
       }
@@ -119,8 +123,8 @@ export class MCPTools {
     if (this.mcpClient) {
       try {
         await this.mcpClient.close();
-      } catch (error: any) {
-        console.warn(`Error closing MCP client: ${error.message}`);
+      } catch (error: unknown) {
+        console.warn(`Error closing MCP client: ${getErrorMessage(error)}`);
       }
     }
   }
@@ -129,59 +133,70 @@ export class MCPTools {
 class WrappedMCPTool extends StructuredTool {
   name: string;
   description: string;
-  schema: z.ZodObject<any>;
+  schema: z.ZodObject<z.ZodRawShape>;
 
-  constructor(private mcpTool: any) {
+  constructor(private mcpTool: StructuredTool) {
     super();
-    this.name = `mcp_${this.mcpTool.name}`;
-    this.description = `[MCP Tool] ${this.mcpTool.description}`;
+    this.name = `mcp_${mcpTool.name}`;
+    this.description = `[MCP Tool] ${mcpTool.description}`;
     // LangChain MCP tools already have a 'schema' property with the JSON schema
-    this.schema = this.convertSchema(this.mcpTool.schema);
+    this.schema = this.convertSchema(mcpTool.schema);
   }
 
-  async _call(inputs: any): Promise<string> {
+  async _call(inputs: Record<string, unknown>): Promise<string> {
     try {
       const result = await this.mcpTool.invoke(inputs);
       // LangChain MCP tools return results as strings already
       return typeof result === 'string' ? result : JSON.stringify(result);
-    } catch (error: any) {
-      return `MCP Error: ${error.message}`;
+    } catch (error: unknown) {
+      return `MCP Error: ${getErrorMessage(error)}`;
     }
   }
 
-  private convertSchema(mcpSchema: any): z.ZodObject<any> {
+  private convertSchema(mcpSchema: z.ZodObject<z.ZodRawShape> | unknown): z.ZodObject<z.ZodRawShape> {
+    // If already a Zod schema, return as-is
+    if (mcpSchema instanceof z.ZodObject) {
+      return mcpSchema;
+    }
+
     const shape: Record<string, z.ZodTypeAny> = {};
 
-    if (mcpSchema?.properties) {
-      for (const [key, prop] of Object.entries(mcpSchema.properties as Record<string, any>)) {
-        if (typeof prop === 'object' && prop !== null) {
-          let zodType: z.ZodTypeAny;
+    // Handle JSON Schema-like objects
+    if (typeof mcpSchema === 'object' && mcpSchema !== null && 'properties' in mcpSchema) {
+      const schemaObj = mcpSchema as { properties?: Record<string, unknown>; required?: string[] };
 
-          if (prop.type === 'string') {
-            zodType = z.string();
-          } else if (prop.type === 'number' || prop.type === 'integer') {
-            zodType = z.number();
-          } else if (prop.type === 'boolean') {
-            zodType = z.boolean();
-          } else if (prop.type === 'array') {
-            zodType = z.array(z.any());
-          } else if (prop.type === 'object') {
-            zodType = z.object({}).passthrough();
-          } else {
-            zodType = z.any();
+      if (schemaObj.properties) {
+        for (const [key, prop] of Object.entries(schemaObj.properties)) {
+          if (typeof prop === 'object' && prop !== null && 'type' in prop) {
+            const propObj = prop as { type?: string; description?: string };
+            let zodType: z.ZodTypeAny;
+
+            if (propObj.type === 'string') {
+              zodType = z.string();
+            } else if (propObj.type === 'number' || propObj.type === 'integer') {
+              zodType = z.number();
+            } else if (propObj.type === 'boolean') {
+              zodType = z.boolean();
+            } else if (propObj.type === 'array') {
+              zodType = z.array(z.any());
+            } else if (propObj.type === 'object') {
+              zodType = z.object({}).passthrough();
+            } else {
+              zodType = z.any();
+            }
+
+            // Add description if available
+            if (propObj.description) {
+              zodType = zodType.describe(propObj.description);
+            }
+
+            // Make optional if not required
+            if (schemaObj.required && Array.isArray(schemaObj.required) && !schemaObj.required.includes(key)) {
+              zodType = zodType.optional();
+            }
+
+            shape[key] = zodType;
           }
-
-          // Add description if available
-          if (prop.description) {
-            zodType = zodType.describe(prop.description);
-          }
-
-          // Make optional if not required
-          if (mcpSchema.required && !mcpSchema.required.includes(key)) {
-            zodType = zodType.optional();
-          }
-
-          shape[key] = zodType;
         }
       }
     }

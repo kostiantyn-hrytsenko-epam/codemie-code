@@ -47,7 +47,7 @@ function getEnvWithFallback(
 
 /**
  * Load AI configuration from environment variables
- * Priority: CODEMIE_* (generic) > ANTHROPIC_*/OPENAI_* (provider-specific)
+ * Priority: CODEMIE_* (generic) > ANTHROPIC_* / OPENAI_* (provider-specific)
  */
 export function loadAIConfig(provider?: ModelProvider): AIConfig {
   // First, try to determine the model

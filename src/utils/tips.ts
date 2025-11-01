@@ -15,7 +15,7 @@ function loadTipsFromFile(): Tip[] {
     const tipsPath = path.join(__dirname, '../data/tips.json');
     const tipsData = fs.readFileSync(tipsPath, 'utf-8');
     return JSON.parse(tipsData);
-  } catch (error) {
+  } catch {
     // Fallback tips if file can't be loaded
     return [
       { message: 'Run codemie list to see available agents', command: 'codemie list' },

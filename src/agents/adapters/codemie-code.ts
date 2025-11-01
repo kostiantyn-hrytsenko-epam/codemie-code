@@ -1,6 +1,8 @@
 import { AgentAdapter } from '../registry';
 import { CodeMieCode } from '../../code';
 import { logger } from '../../utils/logger';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 export class CodeMieCodeAdapter implements AgentAdapter {
   name = 'codemie-code';
@@ -31,7 +33,9 @@ export class CodeMieCodeAdapter implements AgentAdapter {
   async getVersion(): Promise<string | null> {
     // Read from package.json
     try {
-      const packageJson = require('../../../package.json');
+      const packageJsonPath = join(__dirname, '../../../package.json');
+      const packageJsonContent = readFileSync(packageJsonPath, 'utf-8');
+      const packageJson = JSON.parse(packageJsonContent) as { version: string };
       return packageJson.version;
     } catch {
       return null;

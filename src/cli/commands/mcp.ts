@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import chalk from 'chalk';
+import { getErrorMessage } from '../../utils/errors.js';
 
 interface MCPServerConfig {
   command?: string;
@@ -86,7 +87,7 @@ async function loadToolkitServers(): Promise<MCPServersConfig | null> {
   try {
     const content = await fs.readFile(bundledPath, 'utf-8');
     return JSON.parse(content);
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -100,7 +101,7 @@ async function loadGlobalServers(): Promise<MCPServersConfig | null> {
       return { mcpServers: config.mcpServers };
     }
     return null;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -360,25 +361,25 @@ async function ensureCodemieDir(): Promise<void> {
   const codemieDir = path.join(os.homedir(), '.codemie');
   try {
     await fs.mkdir(codemieDir, { recursive: true });
-  } catch (error: any) {
-    throw new Error(`Failed to create .codemie directory: ${error.message}`);
+  } catch (error: unknown) {
+    throw new Error(`Failed to create .codemie directory: ${getErrorMessage(error)}`);
   }
 }
 
-async function loadGlobalConfig(): Promise<any> {
+async function loadGlobalConfig(): Promise<Record<string, unknown>> {
   const globalConfigPath = path.join(os.homedir(), '.codemie', 'config.json');
   try {
     const content = await fs.readFile(globalConfigPath, 'utf-8');
-    return JSON.parse(content);
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
+    return JSON.parse(content) as Record<string, unknown>;
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return {};
     }
     throw error;
   }
 }
 
-async function saveGlobalConfig(config: any): Promise<void> {
+async function saveGlobalConfig(config:Record<string,unknown>): Promise<void> {
   await ensureCodemieDir();
   const globalConfigPath = path.join(os.homedir(), '.codemie', 'config.json');
   await fs.writeFile(globalConfigPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
@@ -436,15 +437,18 @@ async function addMCPServer(
     const config = await loadGlobalConfig();
 
     // Initialize mcpServers if not exists
-    if (!config.mcpServers) {
+    if (!config.mcpServers || typeof config.mcpServers !== 'object') {
       config.mcpServers = {};
     }
 
+    const mcpServers = config.mcpServers as Record<string, MCPServerConfig>;
+
     // Check if server already exists
-    const isUpdate = config.mcpServers[name] !== undefined;
+    const isUpdate = mcpServers[name] !== undefined;
 
     // Add/update server
-    config.mcpServers[name] = serverConfig;
+    mcpServers[name] = serverConfig;
+    config.mcpServers = mcpServers;
 
     // Save config
     await saveGlobalConfig(config);
@@ -464,8 +468,8 @@ async function addMCPServer(
     console.log(chalk.dim(`\nTo use this server:`));
     console.log(chalk.dim(`  codemie-code --mcp-servers ${name}\n`));
 
-  } catch (error: any) {
-    console.log(chalk.red(`\n✗ Failed to add MCP server: ${error.message}\n`));
+  } catch (error: unknown) {
+    console.log(chalk.red(`\n✗ Failed to add MCP server: ${getErrorMessage(error)}\n`));
   }
 }
 
@@ -475,16 +479,18 @@ async function removeMCPServer(name: string): Promise<void> {
     const config = await loadGlobalConfig();
 
     // Check if mcpServers exists
-    if (!config.mcpServers) {
+    if (!config.mcpServers || typeof config.mcpServers !== 'object') {
       console.log(chalk.yellow(`\n⚠ No MCP servers configured\n`));
       return;
     }
 
+    const mcpServers = config.mcpServers as Record<string, MCPServerConfig>;
+
     // Check if server exists
-    if (!config.mcpServers[name]) {
+    if (!mcpServers[name]) {
       console.log(chalk.yellow(`\n⚠ MCP server '${name}' not found in global configuration\n`));
       console.log(chalk.dim('Available servers:'));
-      for (const serverName of Object.keys(config.mcpServers)) {
+      for (const serverName of Object.keys(mcpServers)) {
         console.log(chalk.dim(`  • ${serverName}`));
       }
       console.log();
@@ -492,14 +498,15 @@ async function removeMCPServer(name: string): Promise<void> {
     }
 
     // Remove server
-    delete config.mcpServers[name];
+    delete mcpServers[name];
+    config.mcpServers = mcpServers;
 
     // Save config
     await saveGlobalConfig(config);
 
     console.log(chalk.green(`\n✓ Removed MCP server: ${name}\n`));
 
-  } catch (error: any) {
-    console.log(chalk.red(`\n✗ Failed to remove MCP server: ${error.message}\n`));
+  } catch (error: unknown) {
+    console.log(chalk.red(`\n✗ Failed to remove MCP server: ${getErrorMessage(error)}\n`));
   }
 }

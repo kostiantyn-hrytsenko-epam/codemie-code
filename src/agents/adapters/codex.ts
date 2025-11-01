@@ -14,8 +14,9 @@ export class CodexAdapter implements AgentAdapter {
       // Install via pip
       await exec('pip', ['install', 'openai-codex'], { timeout: 120000 });
       logger.success('Codex installed successfully');
-    } catch (error: any) {
-      throw new Error(`Failed to install Codex: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to install Codex: ${errorMessage}`);
     }
   }
 
@@ -24,8 +25,9 @@ export class CodexAdapter implements AgentAdapter {
     try {
       await exec('pip', ['uninstall', '-y', 'openai-codex']);
       logger.success('Codex uninstalled successfully');
-    } catch (error: any) {
-      throw new Error(`Failed to uninstall Codex: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to uninstall Codex: ${errorMessage}`);
     }
   }
 

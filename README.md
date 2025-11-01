@@ -387,7 +387,7 @@ codemie doctor
 ```
 
 Checks:
-- ✅ Node.js version (>= 18.0.0)
+- ✅ Node.js version (>= 24.0.0)
 - ✅ npm installation
 - ✅ git availability
 - ✅ Environment variables configuration
@@ -755,7 +755,7 @@ codemie-code/
 ### Technology Stack
 
 - **Language**: TypeScript (ES2022, NodeNext modules)
-- **Runtime**: Node.js >= 18.0.0
+- **Runtime**: Node.js >= 24.0.0 (LTS Krypton)
 - **Package Manager**: npm
 - **LLM Framework**: LangChain 1.x (`@langchain/core`, `@langchain/langgraph`, `@langchain/openai`)
 - **LLM Provider**: Any OpenAI-compatible API

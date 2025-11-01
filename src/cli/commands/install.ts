@@ -71,11 +71,11 @@ export function createInstallCommand(): Command {
           console.log(chalk.cyan('💡 Next steps:'));
           console.log(chalk.white(`   Run the agent with:`), chalk.blueBright(`codemie run ${agentName}`));
           console.log();
-        } catch (error: any) {
+        } catch (error: unknown) {
           spinner.fail(`Failed to install ${agent.displayName}`);
           throw error;
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Installation failed:', error);
         process.exit(1);
       }

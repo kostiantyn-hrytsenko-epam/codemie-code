@@ -61,11 +61,11 @@ export function createUninstallCommand(): Command {
         try {
           await agent.uninstall();
           spinner.succeed(`${agent.displayName} uninstalled successfully`);
-        } catch (error: any) {
+        } catch (error: unknown) {
           spinner.fail(`Failed to uninstall ${agent.displayName}`);
           throw error;
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Uninstallation failed:', error);
         process.exit(1);
       }

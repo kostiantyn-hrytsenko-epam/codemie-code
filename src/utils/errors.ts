@@ -39,3 +39,15 @@ export class PathSecurityError extends CodeMieError {
     this.name = 'PathSecurityError';
   }
 }
+
+/**
+ * Extracts error message from unknown error type
+ * @param error - The caught error (unknown type)
+ * @returns Error message as string
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}

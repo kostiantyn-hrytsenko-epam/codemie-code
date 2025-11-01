@@ -14,25 +14,25 @@ class Logger {
     this.debugEnabled = process.env.CODEMIE_DEBUG === 'true';
   }
 
-  debug(message: string, ...args: any[]): void {
+  debug(message: string, ...args: unknown[]): void {
     if (this.debugEnabled) {
       console.log(chalk.cyan(message), ...args);
     }
   }
 
-  info(message: string, ...args: any[]): void {
+  info(message: string, ...args: unknown[]): void {
     console.log(chalk.blueBright(message), ...args);
   }
 
-  success(message: string, ...args: any[]): void {
+  success(message: string, ...args: unknown[]): void {
     console.log(chalk.green(`✓ ${message}`), ...args);
   }
 
-  warn(message: string, ...args: any[]): void {
+  warn(message: string, ...args: unknown[]): void {
     console.warn(chalk.yellow(`⚠ ${message}`), ...args);
   }
 
-  error(message: string, error?: Error | any): void {
+  error(message: string, error?: Error | unknown): void {
     console.error(chalk.red(`✗ ${message}`));
     if (error) {
       if (error instanceof Error) {

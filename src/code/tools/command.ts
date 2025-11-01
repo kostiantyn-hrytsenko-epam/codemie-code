@@ -1,7 +1,8 @@
 import { StructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { exec } from '../../utils/exec';
-import { FilesystemConfig } from './filesystem';
+import { exec } from '../../utils/exec.js';
+import { FilesystemConfig } from './filesystem.js';
+import { getErrorMessage } from '../../utils/errors.js';
 
 export class CommandTools {
   constructor(private config: FilesystemConfig) {}
@@ -81,8 +82,8 @@ class ExecuteCommandTool extends StructuredTool {
       }
 
       return output.join('\n');
-    } catch (error: any) {
-      return `Error executing command: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error executing command: ${getErrorMessage(error)}`;
     }
   }
 }

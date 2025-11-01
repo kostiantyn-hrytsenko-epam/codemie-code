@@ -9,13 +9,26 @@ import { createDoctorCommand } from './commands/doctor';
 import { createVersionCommand } from './commands/version';
 import { createMCPCommand } from './commands/mcp';
 import chalk from 'chalk';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const program = new Command();
+
+// Read version from package.json
+let version = '1.0.0';
+try {
+  const packageJsonPath = join(__dirname, '../../package.json');
+  const packageJsonContent = readFileSync(packageJsonPath, 'utf-8');
+  const packageJson = JSON.parse(packageJsonContent) as { version: string };
+  version = packageJson.version;
+} catch {
+  // Use default version if unable to read
+}
 
 program
   .name('codemie')
   .description('CLI wrapper for managing multiple AI coding agents')
-  .version(require('../../package.json').version);
+  .version(version);
 
 // Add commands
 program.addCommand(createListCommand());

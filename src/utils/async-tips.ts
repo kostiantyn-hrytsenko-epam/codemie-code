@@ -27,7 +27,7 @@ export class AsyncTipDisplay {
       const tipsPath = path.join(__dirname, '../data/tips.json');
       const tipsData = fs.readFileSync(tipsPath, 'utf-8');
       this.tips = JSON.parse(tipsData);
-    } catch (error) {
+    } catch {
       // Fallback tips if file can't be loaded
       this.tips = [
         { message: 'Run codemie list to see available agents', command: 'codemie list' },
@@ -143,7 +143,7 @@ export class AsyncTipDisplay {
    * Display tips during a long-running operation
    * Returns a function to stop the tips when operation completes
    */
-  showDuring(operation: Promise<any>): () => void {
+  showDuring(operation: Promise<unknown>): () => void {
     this.startRotating(10000); // Faster rotation during operations (10s)
 
     const stop = () => {

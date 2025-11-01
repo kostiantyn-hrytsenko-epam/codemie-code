@@ -1,11 +1,10 @@
-import chalk from 'chalk';
 import { Tip } from '../utils/tips';
 import { AgentEvent } from '../code/agent-events';
 
 // Suppress ALL console.error during blessed import to avoid terminal capability parsing errors
 const originalConsoleError = console.error;
 let suppressErrors = true;
-console.error = function(...args: any[]) {
+console.error = function(...args: unknown[]) {
   if (suppressErrors) {
     // Suppress all errors during initial setup
     return;
@@ -86,7 +85,7 @@ export class TerminalUI {
   }
 
   private createScreen(): blessed.Widgets.Screen {
-    const screenOptions: any = {
+    const screenOptions: Record<string, unknown> = {
       smartCSR: true,
       fullUnicode: true, // Enable full unicode for emoji support
       dockBorders: true,
@@ -119,18 +118,18 @@ export class TerminalUI {
     });
 
     // Disable problematic terminal capabilities after screen creation
-    if (screen.program && (screen.program as any).setupColors) {
+    if (screen.program && (screen.program as unknown as Record<string, unknown>).setupColors) {
       try {
         // Override setupColors to prevent underline color issues
-        const originalSetupColors = (screen.program as any).setupColors.bind(screen.program);
-        (screen.program as any).setupColors = function() {
+        const originalSetupColors = (screen.program as unknown as Record<string, unknown>).setupColors as () => void;
+        (screen.program as unknown as Record<string, unknown>).setupColors = function() {
           try {
             originalSetupColors();
-          } catch (e) {
+          } catch {
             // Ignore color setup errors
           }
         };
-      } catch (e) {
+      } catch {
         // Ignore if setupColors doesn't exist
       }
     }
@@ -139,7 +138,7 @@ export class TerminalUI {
     // This catches errors from blessed's terminfo parser (like Setulc)
     if (screen.program) {
       const originalError = console.error;
-      console.error = function(...args: any[]) {
+      console.error = function(...args: unknown[]) {
         // Check if it's a terminal capability error
         const errorStr = args.join(' ');
         if (errorStr.includes('Error on xterm') ||
@@ -158,7 +157,7 @@ export class TerminalUI {
   }
 
   private createContentBox(): blessed.Widgets.BoxElement {
-    const boxOptions: any = {
+    const boxOptions: Record<string, unknown> = {
       top: 0,
       left: 0,
       width: '100%',
@@ -196,7 +195,7 @@ export class TerminalUI {
 
   private createInputBox(): blessed.Widgets.BoxElement {
     // Use a simple box instead of textarea - just display the prompt
-    const inputOptions: any = {
+    const inputOptions: Record<string, unknown> = {
       bottom: 4,
       left: 0,
       width: '100%',
@@ -242,8 +241,8 @@ export class TerminalUI {
       const lineCount = lines.length;
       const newHeight = Math.min(Math.max(lineCount + 2, 3), 10 + 2); // +2 for borders
 
-      if ((box as any).height !== newHeight) {
-        (box as any).height = newHeight;
+      if ((box as unknown as Record<string, unknown>).height !== newHeight) {
+        (box as unknown as Record<string, unknown>).height = newHeight;
         // Need to reposition dependent elements (tip box position stays same at bottom: 0)
         this.screen.render();
       }
@@ -254,49 +253,49 @@ export class TerminalUI {
     };
 
     // Store methods and data for getting/clearing input
-    (box as any).getInputText = () => inputText;
-    (box as any).clearInputText = () => {
+    (box as unknown as Record<string, unknown>).getInputText = () => inputText;
+    (box as unknown as Record<string, unknown>).clearInputText = () => {
       inputText = '';
-      (box as any).inputText = inputText;
+      (box as unknown as Record<string, unknown>).inputText = inputText;
       // Reset height to minimum when cleared
-      (box as any).height = 3;
+      (box as unknown as Record<string, unknown>).height = 3;
       updateDisplay();
     };
-    (box as any).addNewline = () => {
+    (box as unknown as Record<string, unknown>).addNewline = () => {
       inputText += '\n';
-      (box as any).inputText = inputText;
+      (box as unknown as Record<string, unknown>).inputText = inputText;
       updateDisplay();
     };
-    (box as any).setInputText = (text: string) => {
+    (box as unknown as Record<string, unknown>).setInputText = (text: string) => {
       inputText = text;
-      (box as any).inputText = inputText;
+      (box as unknown as Record<string, unknown>).inputText = inputText;
       // Reset height when setting new text (usually for autocomplete)
-      (box as any).height = 3;
+      (box as unknown as Record<string, unknown>).height = 3;
       updateDisplay();
     };
 
     // Store inputText directly on box for external access
-    (box as any).inputText = inputText;
+    (box as unknown as Record<string, unknown>).inputText = inputText;
 
     // Listen to screen keypresses when box is focused
     box.on('focus', () => {
-      (box as any)._inputFocused = true;
+      (box as unknown as Record<string, unknown>)._inputFocused = true;
     });
 
     box.on('blur', () => {
-      (box as any)._inputFocused = false;
+      (box as unknown as Record<string, unknown>)._inputFocused = false;
     });
 
     // Capture input at screen level
-    this.screen.on('keypress', (ch: any, key: any) => {
-      if (!(box as any)._inputFocused) return;
+    (this.screen as any).on('keypress', (ch: unknown, key: Record<string, unknown>) => {
+      if (!(box as unknown as Record<string, unknown>)._inputFocused) return;
       if (!key) return;
 
       // Handle input
       if (key.full === 'backspace') {
         if (inputText.length > 0) {
           inputText = inputText.slice(0, -1);
-          (box as any).inputText = inputText; // Keep in sync
+          (box as unknown as Record<string, unknown>).inputText = inputText; // Keep in sync
           updateDisplay();
         }
       } else if (key.full === 'enter' || key.full === 'return') {
@@ -304,22 +303,22 @@ export class TerminalUI {
         return;
       } else if (ch && typeof ch === 'string' && ch.length === 1 && !key.ctrl && !key.meta) {
         inputText += ch;
-        (box as any).inputText = inputText; // Keep in sync
+        (box as unknown as Record<string, unknown>).inputText = inputText; // Keep in sync
         updateDisplay();
       }
     });
 
     // Make it focusable
-    (box as any).clickable = true;
-    (box as any).keyable = true;
-    (box as any).keys = true;
-    (box as any).input = true;
+    (box as unknown as Record<string, unknown>).clickable = true;
+    (box as unknown as Record<string, unknown>).keyable = true;
+    (box as unknown as Record<string, unknown>).keys = true;
+    (box as unknown as Record<string, unknown>).input = true;
 
-    return box as any;
+    return box as blessed.Widgets.BoxElement;
   }
 
   private createTipBox(): blessed.Widgets.BoxElement {
-    const tipOptions: any = {
+    const tipOptions: Record<string, unknown> = {
       bottom: 0,
       left: 0,
       width: '100%',
@@ -338,7 +337,7 @@ export class TerminalUI {
   }
 
   private createCommandSuggestionBox(): blessed.Widgets.BoxElement {
-    const suggestionOptions: any = {
+    const suggestionOptions: Record<string, unknown> = {
       bottom: 7,
       left: 0,
       width: '100%',
@@ -411,7 +410,8 @@ export class TerminalUI {
     // Shift+Enter for newline (multiline support)
     this.inputBox.key(['S-enter'], () => {
       // Add newline using the built-in method
-      (this.inputBox as any).addNewline();
+      const box = this.inputBox as unknown as Record<string, unknown>;
+      (box.addNewline as () => void)();
     });
 
     // Arrow keys for command navigation when suggestions are visible
@@ -436,7 +436,8 @@ export class TerminalUI {
         if (selectedCommand) {
           // Set the input text using our custom method
           const newText = selectedCommand.command + ' ';
-          (this.inputBox as any).setInputText(newText);
+          const box = this.inputBox as unknown as Record<string, unknown>;
+          (box.setInputText as (text: string) => void)(newText);
 
           this.hideCommandSuggestions();
         }
@@ -483,11 +484,12 @@ export class TerminalUI {
 
   private setupInputHandlers(): void {
     // Watch for input changes to show command suggestions
-    this.inputBox.on('keypress', (ch: any, key: any) => {
+    this.inputBox.on('keypress', () => {
       // Use setImmediate to get the updated value after keypress
       setImmediate(() => {
         // Get the actual input text from our custom method
-        const currentValue = (this.inputBox as any).getInputText() || '';
+        const box = this.inputBox as unknown as Record<string, unknown>;
+        const currentValue = (box.getInputText as () => string)() || '';
 
         if (currentValue.startsWith('/') && !currentValue.includes('\n')) {
           // Show command suggestions
@@ -553,7 +555,7 @@ export class TerminalUI {
 
     // Adjust height based on number of matching commands
     const lines = this.filteredCommands.length;
-    (this.commandSuggestionBox as any).height = Math.min(lines + 3, 15);
+    (this.commandSuggestionBox as unknown as Record<string, unknown>).height = Math.min(lines + 3, 15);
 
     this.screen.render();
   }
@@ -572,7 +574,8 @@ export class TerminalUI {
     if (this.isProcessing) return;
 
     // Get message from our custom input method
-    const message = ((this.inputBox as any).getInputText() || '').trim();
+    const box = this.inputBox as unknown as Record<string, unknown>;
+    const message = ((box.getInputText as () => string)() || '').trim();
 
     if (!message) return;
 
@@ -589,13 +592,15 @@ export class TerminalUI {
     if (message.toLowerCase() === 'clear' || message.toLowerCase() === '/clear') {
       this.config.onClear();
       this.clearContent();
-      (this.inputBox as any).clearInputText();
+      const box1 = this.inputBox as unknown as Record<string, unknown>;
+      (box1.clearInputText as () => void)();
       this.screen.render();
       return;
     }
 
     // Clear input and reset prompt
-    (this.inputBox as any).clearInputText();
+    const box2 = this.inputBox as unknown as Record<string, unknown>;
+    (box2.clearInputText as () => void)();
 
     // Show user message
     this.appendToContent('');
@@ -624,8 +629,9 @@ export class TerminalUI {
           this.appendToContent(`{white-fg}${this.escapeForBlessed(line)}{/white-fg}`);
         }
         this.appendToContent('');
-      } catch (error: any) {
-        this.appendToContent(`{red-fg}Error:{/red-fg} {white-fg}${this.escapeForBlessed(error.message)}{/white-fg}`);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.appendToContent(`{red-fg}Error:{/red-fg} {white-fg}${this.escapeForBlessed(errorMessage)}{/white-fg}`);
         this.appendToContent('');
         this.appendToContent('{gray-fg}You can continue using the assistant or try the command again with correct arguments.{/gray-fg}');
         this.appendToContent('');
@@ -699,7 +705,7 @@ export class TerminalUI {
                 this.showError(event.error);
                 break;
             }
-          } catch (err: any) {
+          } catch (err: unknown) {
             // Catch any errors in event handling to prevent breaking the flow
             console.error('Error handling event:', err);
           }
@@ -709,13 +715,14 @@ export class TerminalUI {
         this.appendToContent('{cyan-fg}Assistant:{/cyan-fg} {gray-fg}(thinking...){/gray-fg}');
         await this.config.onSubmit(message);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       // Silently ignore cancellation errors - already handled via 'cancelled' event
-      if (error.message === 'Execution cancelled by user') {
+      if (errorMessage === 'Execution cancelled by user') {
         // Don't return early - fall through to finally block for proper cleanup
       } else {
         // Ensure error is displayed to user
-        this.showError(error.message || 'An error occurred');
+        this.showError(errorMessage || 'An error occurred');
       }
     } finally {
       // ALWAYS reset processing state, even if there was an error
@@ -798,16 +805,16 @@ export class TerminalUI {
   private shortenAllPathsInText(text: string): string {
     // Match absolute paths (starting with / or drive letter on Windows)
     // Pattern: /path/to/file or C:\path\to\file
-    const pathPattern = /(?:^|[\s(,\[\]"'])([\/\\][\w\-\.\/\\]+[\w\-\.]|[A-Z]:[\/\\][\w\-\.\/\\]+[\w\-\.])/g;
+    const pathPattern = /(?:^|[\s(,["'])([/\\][\w\-./\\]+[\w\-.]|[A-Z]:[/\\][\w\-./\\]+[\w\-.])/g;
 
-    return text.replace(pathPattern, (match, path, offset, string) => {
+    return text.replace(pathPattern, (match, path) => {
       const before = match[0] !== '/' && match[0] !== '\\' && !/[A-Z]:/.test(match.slice(0, 2)) ? match[0] : '';
       const shortened = this.shortenFilePath(path.trim());
       return before + shortened;
     });
   }
 
-  private formatToolArg(key: string, value: any): string {
+  private formatToolArg(key: string, value: unknown): string {
     let strValue: string;
 
     if (typeof value === 'string') {
@@ -916,18 +923,16 @@ export class TerminalUI {
     this.removeLastLine();
   }
 
-  public showToolCallStart(toolName: string, toolArgs: Record<string, any>): void {
+  public showToolCallStart(toolName: string, toolArgs: Record<string, unknown>): void {
     // Format tool call as: ⏺ ToolName with only file path (hide large content args and null values)
-    const hiddenArgs = ['old_string', 'new_string', 'content', 'body', 'query', 'data', 'payload'];
-
     // Extract file path if present (and not null/undefined)
     let fileInfo = '';
     if (toolArgs.file_path && toolArgs.file_path !== null && toolArgs.file_path !== undefined) {
-      fileInfo = `(${this.shortenFilePath(toolArgs.file_path)})`;
+      fileInfo = `(${this.shortenFilePath(String(toolArgs.file_path))})`;
     } else if (toolArgs.path && toolArgs.path !== null && toolArgs.path !== undefined) {
-      fileInfo = `(${this.shortenFilePath(toolArgs.path)})`;
+      fileInfo = `(${this.shortenFilePath(String(toolArgs.path))})`;
     } else if (toolArgs.notebook_path && toolArgs.notebook_path !== null && toolArgs.notebook_path !== undefined) {
-      fileInfo = `(${this.shortenFilePath(toolArgs.notebook_path)})`;
+      fileInfo = `(${this.shortenFilePath(String(toolArgs.notebook_path))})`;
     }
 
     const toolMessage = `{green-fg}⏺{/green-fg} {white-fg}${this.escapeForBlessed(toolName)}${fileInfo ? ' ' + this.escapeForBlessed(fileInfo) : ''}{/white-fg}`;
@@ -1003,11 +1008,11 @@ export class TerminalUI {
         // Destroy the screen (suppress any errors)
         try {
           this.screen.destroy();
-        } catch (err) {
+        } catch {
           // Ignore terminfo errors on cleanup
         }
       }
-    } catch (error) {
+    } catch {
       // Silently handle any cleanup errors
     }
   }

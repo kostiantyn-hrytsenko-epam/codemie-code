@@ -47,7 +47,7 @@ codemie doctor
 ```
 
 This checks:
-- ✅ Node.js version (>= 18.0.0)
+- ✅ Node.js version (>= 24.0.0)
 - ✅ npm installation
 - ✅ git availability
 - ✅ Environment variables configuration

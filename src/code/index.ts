@@ -1,15 +1,14 @@
 import { StructuredTool } from '@langchain/core/tools';
-import { FilesystemTools } from './tools/filesystem';
-import { CommandTools } from './tools/command';
-import { GitTools } from './tools/git';
-import { MCPTools } from './tools/mcp';
-import { CodeMieAgent } from './agent';
-import { loadConfig, CodeMieConfig } from './config';
-import { logger } from '../utils/logger';
-import { tipDisplay } from '../utils/tips';
-import { asyncTipDisplay } from '../utils/async-tips';
-import { TerminalUI } from '../ui/terminal-ui';
-import inquirer from 'inquirer';
+import { FilesystemTools } from './tools/filesystem.js';
+import { CommandTools } from './tools/command.js';
+import { GitTools } from './tools/git.js';
+import { MCPTools } from './tools/mcp.js';
+import { CodeMieAgent } from './agent.js';
+import { loadConfig, CodeMieConfig } from './config.js';
+import { logger } from '../utils/logger.js';
+import { asyncTipDisplay } from '../utils/async-tips.js';
+import { TerminalUI } from '../ui/terminal-ui.js';
+import { getErrorMessage } from '../utils/errors.js';
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -81,8 +80,8 @@ export class CodeMieCode {
         tools.push(...mcpToolsList);
         logger.info(`Added ${mcpToolsList.length} MCP tools`);
       }
-    } catch (error: any) {
-      logger.warn(`Failed to initialize MCP tools: ${error.message}`);
+    } catch (error: unknown) {
+      logger.warn(`Failed to initialize MCP tools: ${getErrorMessage(error)}`);
     }
 
     // Create agent
@@ -104,22 +103,23 @@ export class CodeMieCode {
         try {
           const response = await this.agent!.chat(message);
           ui.showAssistantResponse(response);
-        } catch (error: any) {
+        } catch (error: unknown) {
           logger.error('Error during conversation:', error);
-          ui.showError(error.message || 'An error occurred');
+          ui.showError(getErrorMessage(error));
         }
       },
       onSubmitStream: async (message: string, onEvent, abortSignal?: AbortSignal) => {
         try {
           await this.agent!.chatStream(message, onEvent, abortSignal);
-        } catch (error: any) {
+        } catch (error: unknown) {
           // Check if error is from cancellation
-          if (error.message === 'Execution cancelled by user') {
+          const errorMsg = getErrorMessage(error);
+          if (errorMsg === 'Execution cancelled by user') {
             // Cancellation is already handled via event, no need to log as error
             return;
           }
           logger.error('Error during streaming conversation:', error);
-          onEvent({ type: 'error', error: error.message || 'An error occurred' });
+          onEvent({ type: 'error', error: errorMsg });
         }
       },
       onSlashCommand: async (command: string, args: string[]) => {
@@ -176,15 +176,15 @@ export class CodeMieCode {
       });
 
       return output;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If command fails, return the error output (stderr contains the actual error message)
-      if (error.stderr || error.stdout) {
-        const stderr = (error.stderr || '').trim();
-        const stdout = (error.stdout || '').trim();
+      if (error && typeof error === 'object' && ('stderr' in error || 'stdout' in error)) {
+        const stderr = ('stderr' in error && typeof error.stderr === 'string' ? error.stderr : '').trim();
+        const stdout = ('stdout' in error && typeof error.stdout === 'string' ? error.stdout : '').trim();
         const combined = [stdout, stderr].filter(Boolean).join('\n');
-        throw new Error(combined || error.message);
+        throw new Error(combined || getErrorMessage(error));
       }
-      throw new Error(`Command failed: ${error.message}`);
+      throw new Error(`Command failed: ${getErrorMessage(error)}`);
     }
   }
 
@@ -193,7 +193,7 @@ export class CodeMieCode {
       const tipsPath = path.join(__dirname, '../data/tips.json');
       const tipsData = fs.readFileSync(tipsPath, 'utf-8');
       return JSON.parse(tipsData);
-    } catch (error) {
+    } catch {
       return [
         { message: 'Run codemie list to see available agents', command: 'codemie list' },
         { message: 'Use codemie doctor to check your setup', command: 'codemie doctor' }
@@ -227,8 +227,8 @@ export class CodeMieCode {
         const result = await this.executeSlashCommand(command, args);
         console.log(result);
         process.exit(0);
-      } catch (error: any) {
-        console.error(chalk.red('Error:'), error.message);
+      } catch (error: unknown) {
+        console.error(chalk.red('Error:'), getErrorMessage(error));
         process.exit(1);
       }
       return;
@@ -290,7 +290,7 @@ export class CodeMieCode {
             console.log(chalk.green('⏺'), chalk.white(`${event.toolName}(${Object.values(event.toolArgs || {}).join(', ')})`));
             break;
 
-          case 'tool_call_result':
+          case 'tool_call_result': {
             // Truncate long results
             const lines = event.result?.split('\n') || [];
             const maxLines = 5;
@@ -305,6 +305,7 @@ export class CodeMieCode {
             }
             console.log();
             break;
+          }
 
           case 'tool_call_error':
             console.log(chalk.red('⏺ Error:'), event.error);
@@ -347,17 +348,18 @@ export class CodeMieCode {
       process.removeListener('SIGINT', abortHandler);
       process.exit(hasError ? 1 : 0);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       process.removeListener('SIGINT', abortHandler);
       // Clear thinking indicator if still showing
       if (isThinking) {
         process.stderr.write('\r\x1b[K');
       }
       // Check if error is from cancellation
-      if (error.message === 'Execution cancelled by user') {
+      const errorMsg = getErrorMessage(error);
+      if (errorMsg === 'Execution cancelled by user') {
         process.exit(130); // Standard exit code for SIGINT
       }
-      console.error(chalk.red('Error:'), error.message);
+      console.error(chalk.red('Error:'), errorMsg);
       process.exit(1);
     }
   }
@@ -391,9 +393,9 @@ export class CodeMieCode {
       logger.info(`Model: ${config.model}`);
 
       // Simple test to verify credentials
-      const testAgent = new CodeMieAgent(config, []);
+      const _testAgent = new CodeMieAgent(config, []);
       logger.success('Connection test successful!');
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Connection test failed:', error);
       throw error;
     }

@@ -1,5 +1,4 @@
 import { Command } from 'commander';
-import { logger } from '../../utils/logger';
 import { tipDisplay } from '../../utils/tips';
 import { exec } from '../../utils/exec';
 import chalk from 'chalk';
@@ -27,7 +26,7 @@ export function createDoctorCommand(): Command {
           console.log(`  ${chalk.yellow('⚠')} Version ${nodeVersion} (recommended: >= 18.0.0)`);
           hasIssues = true;
         }
-      } catch (error) {
+      } catch {
         console.log(`  ${chalk.red('✗')} Failed to check version`);
         hasIssues = true;
       }
@@ -38,7 +37,7 @@ export function createDoctorCommand(): Command {
       try {
         const result = await exec('npm', ['--version']);
         console.log(`  ${chalk.green('✓')} Version ${result.stdout}`);
-      } catch (error) {
+      } catch {
         console.log(`  ${chalk.red('✗')} npm not found`);
         hasIssues = true;
       }
@@ -49,7 +48,7 @@ export function createDoctorCommand(): Command {
       try {
         const result = await exec('git', ['--version']);
         console.log(`  ${chalk.green('✓')} ${result.stdout}`);
-      } catch (error) {
+      } catch {
         console.log(`  ${chalk.yellow('⚠')} git not found (optional)`);
       }
       console.log();

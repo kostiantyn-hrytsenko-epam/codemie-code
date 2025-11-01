@@ -33,7 +33,7 @@ export function createRunCommand(): Command {
 
         // Run the agent
         await agent.run(args);
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Failed to run agent:', error);
         process.exit(1);
       }

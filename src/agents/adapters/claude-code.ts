@@ -14,8 +14,9 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       // Install via npm
       await exec('npm', ['install', '-g', '@anthropic-ai/claude-code'], { timeout: 120000 });
       logger.success('Claude Code installed successfully');
-    } catch (error: any) {
-      throw new Error(`Failed to install Claude Code: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to install Claude Code: ${errorMessage}`);
     }
   }
 
@@ -24,8 +25,9 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     try {
       await exec('npm', ['uninstall', '-g', '@anthropic-ai/claude-code']);
       logger.success('Claude Code uninstalled successfully');
-    } catch (error: any) {
-      throw new Error(`Failed to uninstall Claude Code: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to uninstall Claude Code: ${errorMessage}`);
     }
   }
 

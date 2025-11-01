@@ -1,6 +1,7 @@
 import { StructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { exec } from '../../utils/exec';
+import { exec } from '../../utils/exec.js';
+import { getErrorMessage } from '../../utils/errors.js';
 
 export class GitTools {
   constructor(private rootDir: string) {}
@@ -28,8 +29,8 @@ class GitStatusTool extends StructuredTool {
     try {
       const result = await exec('git', ['status', '--short'], { cwd: this.rootDir });
       return result.stdout || 'No changes';
-    } catch (error: any) {
-      return `Error: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error: ${getErrorMessage(error)}`;
     }
   }
 }
@@ -52,8 +53,8 @@ class GitDiffTool extends StructuredTool {
 
       const result = await exec('git', args, { cwd: this.rootDir });
       return result.stdout || 'No differences';
-    } catch (error: any) {
-      return `Error: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error: ${getErrorMessage(error)}`;
     }
   }
 }
@@ -77,8 +78,8 @@ class GitLogTool extends StructuredTool {
         { cwd: this.rootDir }
       );
       return result.stdout || 'No commits';
-    } catch (error: any) {
-      return `Error: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error: ${getErrorMessage(error)}`;
     }
   }
 }
@@ -102,8 +103,8 @@ class GenericGitTool extends StructuredTool {
 
       const result = await exec('git', cleanArgs, { cwd: this.rootDir });
       return result.stdout || 'Command executed successfully';
-    } catch (error: any) {
-      return `Error: ${error.message}`;
+    } catch (error: unknown) {
+      return `Error: ${getErrorMessage(error)}`;
     }
   }
 }
