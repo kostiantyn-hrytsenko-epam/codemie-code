@@ -212,29 +212,8 @@ class ReplaceInFileTool extends StructuredTool {
 
   async _call({ filePath, replacements }: z.infer<typeof this.schema>): Promise<string> {
     try {
-      // DEBUG LOGGING: Log tool call arguments
-      logger.info('\n🔧 REPLACE_IN_FILE DEBUG - Tool Call Started');
-      logger.info('📄 File Path:', filePath);
-      logger.info('📊 Number of replacements:', replacements.length);
-      logger.info('🔍 Replacement Details:');
-
-      replacements.forEach((replacement, index) => {
-        logger.info(`  ${index + 1}. Type: ${replacement.type}`);
-        if (replacement.type === 'lines') {
-          logger.info(`     Lines: ${replacement.startLine}-${replacement.endLine}`);
-          logger.info(`     Replace with: "${replacement.replaceWith}"`);
-        } else if (replacement.type === 'insert_before' || replacement.type === 'insert_after') {
-          logger.info(`     Line: ${replacement.lineNumber}`);
-          logger.info(`     Insert text: "${replacement.insertText}"`);
-        } else {
-          logger.info(`     Search for: "${replacement.searchFor}"`);
-          logger.info(`     Replace with: "${replacement.replaceWith}"`);
-        }
-      });
-
       // Resolve path relative to working directory
       const resolvedPath = path.resolve(this.workingDirectory, filePath);
-      logger.info('🗂️ Resolved file path:', resolvedPath);
 
       // Basic security check - ensure we're not escaping working directory
       if (!resolvedPath.startsWith(this.workingDirectory)) {
@@ -311,28 +290,18 @@ class ReplaceInFileTool extends StructuredTool {
       }
 
       // Process string and regex replacements
-      logger.info('\n🔤 STRING/REGEX REPLACEMENTS DEBUG');
-      logger.info('📊 String/regex replacements to process:', stringRegexReplacements.length);
-
       for (let i = 0; i < stringRegexReplacements.length; i++) {
         const replacement = stringRegexReplacements[i];
-        logger.info(`\n🔍 Processing ${replacement.type} replacement ${i + 1}:`);
-        logger.info(`   Search for: "${replacement.searchFor}"`);
-        logger.info(`   Replace with: "${replacement.replaceWith}"`);
 
         const searchPattern = replacement.type === 'regex'
           ? new RegExp(replacement.searchFor!, 'g')
           : new RegExp(this.escapeRegex(replacement.searchFor!), 'g');
 
         const matches = (modifiedContent.match(searchPattern) || []).length;
-        logger.info(`   Found ${matches} match(es)`);
 
         if (matches > 0) {
           modifiedContent = modifiedContent.replace(searchPattern, replacement.replaceWith!);
           totalReplacements += matches;
-          logger.info(`   ✅ Applied ${matches} replacement(s)`);
-        } else {
-          logger.info(`   ⚠️ No matches found for this pattern`);
         }
       }
 
@@ -347,20 +316,8 @@ class ReplaceInFileTool extends StructuredTool {
       if (modifiedContent !== content) {
         await fs.writeFile(resolvedPath, modifiedContent, 'utf-8');
 
-        logger.info('\n🎉 REPLACE_IN_FILE SUMMARY');
-        logger.info('✅ File successfully modified');
-        logger.info('📊 Total replacement operations:', replacements.length);
-        logger.info('🔄 Total individual changes:', totalReplacements);
-        logger.info('📏 Original content length:', content.length);
-        logger.info('📏 Final content length:', modifiedContent.length);
-        logger.info('📄 File written to:', resolvedPath);
-
         return `Successfully applied ${replacements.length} replacement operation(s) with ${totalReplacements} total changes in ${filePath}`;
       } else {
-        logger.info('\n⚠️ REPLACE_IN_FILE RESULT: No changes made');
-        logger.info('📊 Replacement operations processed:', replacements.length);
-        logger.info('🔄 Total matches found: 0');
-
         return `No changes made to ${filePath} - all replacement patterns resulted in 0 matches`;
       }
     } catch (error) {
@@ -376,11 +333,6 @@ class ReplaceInFileTool extends StructuredTool {
     lineReplacements: Array<{startLine?: number, endLine?: number, replaceWith: string}>,
     insertOperations: Array<{type: string, lineNumber?: number, insertText?: string}>
   ): string {
-    logger.info('\n📐 CHUNK-BASED PROCESSING DEBUG');
-    logger.info('📏 Original file lines:', lines.length);
-    logger.info('🔄 Line replacements to process:', lineReplacements.length);
-    logger.info('📝 Insert operations to process:', insertOperations.length);
-
     // Validate and filter line replacements
     const validReplacements = lineReplacements
       .filter(r => r.startLine !== undefined && r.endLine !== undefined)
@@ -390,8 +342,6 @@ class ReplaceInFileTool extends StructuredTool {
         replaceWith: r.replaceWith
       }))
       .filter(r => r.startLine > 0 && r.endLine >= r.startLine && r.endLine <= lines.length);
-
-    logger.info('✅ Valid replacements after filtering:', validReplacements.length);
 
     // Validate and filter insert operations
     const validInserts = insertOperations
@@ -403,10 +353,7 @@ class ReplaceInFileTool extends StructuredTool {
       }))
       .filter(r => r.lineNumber > 0 && r.lineNumber <= lines.length);
 
-    logger.info('✅ Valid insert operations after filtering:', validInserts.length);
-
     if (validReplacements.length === 0 && validInserts.length === 0) {
-      logger.info('⚠️ No valid operations found, returning original content');
       return lines.join('\n');
     }
 
@@ -442,9 +389,6 @@ class ReplaceInFileTool extends StructuredTool {
     }
 
     const sortedBoundaries = Array.from(boundaries).sort((a, b) => a - b);
-
-    logger.info('🔢 Boundaries created:', sortedBoundaries);
-    logger.info('🧩 Creating chunks between boundaries...');
 
     // Create chunks between boundaries
     interface FileChunk {
@@ -497,14 +441,8 @@ class ReplaceInFileTool extends StructuredTool {
       });
     }
 
-    logger.info(`📦 Created ${chunks.length} chunks:`);
-    chunks.forEach((chunk, index) => {
-      logger.info(`  ${index + 1}. Lines ${chunk.startLine}-${chunk.endLine} | Replace: ${chunk.shouldReplace} | Content: "${chunk.content.substring(0, 30)}${chunk.content.length > 30 ? '...' : ''}"`);
-    });
-
     // Build final content by concatenating chunks
     const finalParts: string[] = [];
-    let replacedChunks = 0;
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
@@ -512,24 +450,19 @@ class ReplaceInFileTool extends StructuredTool {
       // Add insert_before content
       if (chunk.insertBefore) {
         finalParts.push(chunk.insertBefore);
-        logger.info(`📝 Chunk ${i + 1}: INSERTED BEFORE line ${chunk.startLine}`);
       }
 
       if (chunk.shouldReplace) {
         // Use replacement content
         finalParts.push(chunk.replacementContent!);
-        replacedChunks++;
-        logger.info(`🔄 Chunk ${i + 1}: REPLACED lines ${chunk.startLine}-${chunk.endLine}`);
       } else {
         // Use original content
         finalParts.push(chunk.content);
-        logger.info(`📝 Chunk ${i + 1}: KEPT lines ${chunk.startLine}-${chunk.endLine}`);
       }
 
       // Add insert_after content
       if (chunk.insertAfter) {
         finalParts.push(chunk.insertAfter);
-        logger.info(`📝 Chunk ${i + 1}: INSERTED AFTER line ${chunk.endLine}`);
       }
 
       // Add newline separator between chunks (except after the last chunk)
@@ -543,8 +476,6 @@ class ReplaceInFileTool extends StructuredTool {
     }
 
     const finalResult = finalParts.join('');
-    logger.info(`✅ Chunk processing complete: ${replacedChunks} chunks replaced`);
-    logger.info(`📏 Final result lines: ${finalResult.split('\n').length}`);
 
     return finalResult;
   }
