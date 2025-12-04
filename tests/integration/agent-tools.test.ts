@@ -1,7 +1,7 @@
 /**
  * Agent Tools Integration Tests
  *
- * Tests that the CodeMie Native agent tools (glob, grep, replace_string)
+ * Tests that the CodeMie Native agent tools (glob, grep, replace_in_file)
  * are properly registered and available.
  */
 
@@ -55,9 +55,9 @@ describe('Agent Tools - Integration', () => {
       expect(toolNames).toContain('grep');
     });
 
-    it('should have replace_string tool available', () => {
+    it('should have replace_in_file tool available', () => {
       const toolNames = getToolSummary().map(t => t.name);
-      expect(toolNames).toContain('replace_string');
+      expect(toolNames).toContain('replace_in_file');
     });
   });
 
@@ -93,7 +93,7 @@ describe('Agent Tools - Integration', () => {
       
       expect(toolNames).toContain('glob');
       expect(toolNames).toContain('grep');
-      expect(toolNames).toContain('replace_string');
+      expect(toolNames).toContain('replace_in_file');
     });
   });
 });

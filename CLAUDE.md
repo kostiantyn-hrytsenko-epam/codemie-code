@@ -382,6 +382,7 @@ codemie-code/
 - `CODEMIE_ANALYTICS_TARGET` - Storage target (local/remote/both)
 - `CODEMIE_ANALYTICS_ENDPOINT` - Remote endpoint URL (optional)
 - `CODEMIE_ANALYTICS_PATH` - Custom local path
+- `CODEMIE_DISABLE_NEW_TOOLS` - Disable new tools (glob, grep, replace_in_file) for testing (true/false)
 
 **Event Types Tracked:**
 - Session lifecycle (start, end, error)
@@ -741,6 +742,19 @@ When working on CodeMie Native (`src/agents/codemie-code/`):
   - Implement security filtering (e.g., path traversal prevention)
   - Follow function-as-tool pattern for LangChain integration
   - Example: `filesystem.ts`, `command.ts`, `git.ts`
+  - **Testing New Tools**: Use `CODEMIE_DISABLE_NEW_TOOLS=true` to compare token usage between old (read_file/write_file) and new tool implementations (glob, grep, replace_in_file)
+  - **replace_in_file Best Practices**:
+    - **PREFER line-based operations** when you know specific line numbers - they are precise and reliable
+    - **Line Replacements**: `{type: "lines", startLine: X, endLine: Y, replaceWith: "final content"}`
+      - Specify `startLine`, `endLine`, and the **COMPLETE FINAL CONTENT** that should exist at those lines
+      - **DO NOT** specify what to search for - just provide the final result
+    - **Insert Operations**:
+      - `{type: "insert_before", lineNumber: X, insertText: "content"}` - Insert before line X
+      - `{type: "insert_after", lineNumber: X, insertText: "content"}` - Insert after line X
+    - **String/Regex**: Only use for bulk replacement of identical text across the file
+    - **Examples**:
+      - Replace function: `{type: "lines", startLine: 10, endLine: 15, replaceWith: "new function"}`
+      - Add import: `{type: "insert_before", lineNumber: 1, insertText: "import { newModule } from './module';"}`
 
 - **UI System** (`ui.ts`, `streaming/`): Terminal interface
   - Use Clack components for consistency

@@ -36,8 +36,8 @@ export function extractToolMetadata(
       case 'grep':
         return extractGrepMetadata(result, toolArgs);
 
-      case 'replace_string':
-        return extractReplaceStringMetadata(result, toolArgs);
+      case 'replace_in_file':
+        return extractReplaceInFileMetadata(result, toolArgs);
 
       default:
         return undefined;
@@ -390,9 +390,9 @@ function extractGrepMetadata(result: string, toolArgs?: Record<string, any>): To
 }
 
 /**
- * Extract metadata from replace_string tool results
+ * Extract metadata from replace_in_file tool results
  */
-function extractReplaceStringMetadata(result: string, toolArgs?: Record<string, any>): ToolMetadata {
+function extractReplaceInFileMetadata(result: string, toolArgs?: Record<string, any>): ToolMetadata {
   const isError = result.toLowerCase().startsWith('error');
 
   if (isError) {
@@ -404,24 +404,29 @@ function extractReplaceStringMetadata(result: string, toolArgs?: Record<string, 
   }
 
   const filePath = toolArgs?.filePath;
-  const noOccurrences = result.includes('No occurrences found');
+  const noChanges = result.includes('No changes made');
 
-  if (noOccurrences) {
+  if (noChanges) {
     return {
       success: true,
       filePath,
-      replaceCount: 0
+      replaceCount: 0,
+      replacementCount: toolArgs?.replacements?.length || 0
     };
   }
 
-  // Parse successful result: "Successfully replaced {count} occurrence(s) of "{searchFor}" in {filePath}"
-  const countMatch = result.match(/replaced (\d+) occurrence/);
-  const replaceCount = countMatch ? parseInt(countMatch[1], 10) : 0;
+  // Parse successful result: "Successfully applied {X} replacement operation(s) with {Y} total changes in {filePath}"
+  const operationsMatch = result.match(/applied (\d+) replacement operation/);
+  const changesMatch = result.match(/with (\d+) total changes/);
+
+  const replacementCount = operationsMatch ? parseInt(operationsMatch[1], 10) : (toolArgs?.replacements?.length || 0);
+  const totalChanges = changesMatch ? parseInt(changesMatch[1], 10) : 0;
 
   return {
     success: true,
     filePath,
-    replaceCount
+    replaceCount: totalChanges,
+    replacementCount
   };
 }
 
@@ -478,10 +483,11 @@ export function formatToolMetadata(toolName: string, metadata: ToolMetadata): st
       break;
     }
 
-    case 'replace_string': {
+    case 'replace_in_file': {
       const fileName = metadata.filePath ? path.basename(metadata.filePath) : 'file';
-      const count = metadata.replaceCount || 0;
-      baseMessage = `✓ Replaced ${count} occurrence(s) in ${fileName}`;
+      const totalChanges = metadata.replaceCount || 0;
+      const operations = metadata.replacementCount || 0;
+      baseMessage = `✓ Applied ${operations} replacement(s) with ${totalChanges} change(s) in ${fileName}`;
       break;
     }
 

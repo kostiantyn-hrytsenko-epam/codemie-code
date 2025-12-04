@@ -99,7 +99,7 @@ class ReadFileTool extends StructuredTool {
             details: `Read ${this.formatFileSize(fileSize)}`
           });
 
-        return `File: ${filePath}\n\n${content}`;
+        return `File: ${filePath}\n\n${this.addLineNumbers(content)}`;
       } else {
         // For small files, read normally but still show progress
         const content = await fs.readFile(resolvedPath, 'utf-8');
@@ -110,7 +110,7 @@ class ReadFileTool extends StructuredTool {
             details: `Read ${this.formatFileSize(fileSize)}`
           });
 
-        return `File: ${filePath}\n\n${content}`;
+        return `File: ${filePath}\n\n${this.addLineNumbers(content)}`;
       }
     } catch (error) {
       return `Error reading file: ${error instanceof Error ? error.message : String(error)}`;
@@ -121,6 +121,22 @@ class ReadFileTool extends StructuredTool {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  /**
+   * Add line numbers to content for better LLM understanding
+   */
+  private addLineNumbers(content: string): string {
+    const lines = content.split('\n');
+    const maxLineNumber = lines.length;
+    const padding = maxLineNumber.toString().length;
+
+    return lines
+      .map((line, index) => {
+        const lineNumber = (index + 1).toString().padStart(padding, ' ');
+        return `${lineNumber}: ${line}`;
+      })
+      .join('\n');
   }
 }
 
@@ -166,18 +182,25 @@ class WriteFileTool extends StructuredTool {
 }
 
 /**
- * String replacement tool - replaces occurrences of a string in a file
- * This tool is token-efficient as it only requires the search and replace strings,
- * not the entire file content like write_file would require.
+ * Multi-replacement tool - perform multiple replacements in a single file
+ * This is highly token-efficient as it allows multiple modifications in one tool call,
+ * eliminating the need for multiple round-trips to the LLM.
  */
-class ReplaceStringTool extends StructuredTool {
-  name = 'replace_string';
-  description = 'Replace all occurrences of a string in a file. This is more token-efficient than write_file when making small changes.';
+class ReplaceInFileTool extends StructuredTool {
+  name = 'replace_in_file';
+  description = 'Perform multiple replacements/insertions in a single file. PREFER line-based operations for precision. For single file include all operations in one tool call. Supports: 1) "lines" - replace content at specific line range, 2) "insert_before"/"insert_after" - insert text before/after specified line, 3) "string" - bulk replace identical text. For line operations, provide only the final content needed. For insertions, specify line number and text to insert.';
 
   schema = z.object({
     filePath: z.string().describe('Path to the file to modify'),
-    searchFor: z.string().describe('The string to search for and replace'),
-    replaceWith: z.string().describe('The string to replace it with'),
+    replacements: z.array(z.object({
+      type: z.enum(['lines', 'insert_before', 'insert_after', 'string', 'regex']).describe('Operation type: "lines" - replace line range, "insert_before" - insert text before line, "insert_after" - insert text after line, "string" - bulk replace text, "regex" - pattern replace.'),
+      startLine: z.number().optional().describe('Starting line number (1-indexed, required for "lines" type). For line-based replacements, specify the first line to replace.'),
+      endLine: z.number().optional().describe('Ending line number (1-indexed, required for "lines" type). Can be same as startLine to replace a single line. For line-based replacements, specify the last line to replace.'),
+      lineNumber: z.number().optional().describe('Line number (1-indexed, required for "insert_before" and "insert_after" types). Line where insertion should occur.'),
+      searchFor: z.string().optional().describe('Text or pattern to search for (required for "string" and "regex" types). NOT used for "lines" or insert types.'),
+      replaceWith: z.string().optional().describe('For "lines" type: the COMPLETE FINAL CONTENT that should exist at the specified line range. For "string"/"regex": text to replace matches with. NOT used for insert types.'),
+      insertText: z.string().optional().describe('Text to insert (required for "insert_before" and "insert_after" types). Content to be inserted at the specified line.')
+    })).describe('Array of replacements to perform')
   });
 
   private workingDirectory: string;
@@ -187,62 +210,343 @@ class ReplaceStringTool extends StructuredTool {
     this.workingDirectory = workingDirectory;
   }
 
-  async _call({ filePath, searchFor, replaceWith }: z.infer<typeof this.schema>): Promise<string> {
+  async _call({ filePath, replacements }: z.infer<typeof this.schema>): Promise<string> {
     try {
+      // DEBUG LOGGING: Log tool call arguments
+      logger.info('\n🔧 REPLACE_IN_FILE DEBUG - Tool Call Started');
+      logger.info('📄 File Path:', filePath);
+      logger.info('📊 Number of replacements:', replacements.length);
+      logger.info('🔍 Replacement Details:');
+
+      replacements.forEach((replacement, index) => {
+        logger.info(`  ${index + 1}. Type: ${replacement.type}`);
+        if (replacement.type === 'lines') {
+          logger.info(`     Lines: ${replacement.startLine}-${replacement.endLine}`);
+          logger.info(`     Replace with: "${replacement.replaceWith}"`);
+        } else if (replacement.type === 'insert_before' || replacement.type === 'insert_after') {
+          logger.info(`     Line: ${replacement.lineNumber}`);
+          logger.info(`     Insert text: "${replacement.insertText}"`);
+        } else {
+          logger.info(`     Search for: "${replacement.searchFor}"`);
+          logger.info(`     Replace with: "${replacement.replaceWith}"`);
+        }
+      });
+
       // Resolve path relative to working directory
       const resolvedPath = path.resolve(this.workingDirectory, filePath);
+      logger.info('🗂️ Resolved file path:', resolvedPath);
 
       // Basic security check - ensure we're not escaping working directory
       if (!resolvedPath.startsWith(this.workingDirectory)) {
         throw new Error('Access denied: Path is outside working directory');
       }
 
-      // Emit progress: starting replacement
+      // Validate replacements
+      for (let i = 0; i < replacements.length; i++) {
+        const replacement = replacements[i];
+        if (replacement.type === 'lines') {
+          if (replacement.startLine === undefined || replacement.endLine === undefined) {
+            throw new Error(`Replacement ${i + 1}: startLine and endLine are required for "lines" type`);
+          }
+          if (replacement.startLine < 1 || replacement.endLine < replacement.startLine) {
+            throw new Error(`Replacement ${i + 1}: invalid line range (startLine: ${replacement.startLine}, endLine: ${replacement.endLine})`);
+          }
+          if (!replacement.replaceWith) {
+            throw new Error(`Replacement ${i + 1}: replaceWith is required for "lines" type`);
+          }
+        } else if (replacement.type === 'insert_before' || replacement.type === 'insert_after') {
+          if (replacement.lineNumber === undefined) {
+            throw new Error(`Replacement ${i + 1}: lineNumber is required for "${replacement.type}" type`);
+          }
+          if (replacement.lineNumber < 1) {
+            throw new Error(`Replacement ${i + 1}: lineNumber must be positive (got: ${replacement.lineNumber})`);
+          }
+          if (!replacement.insertText) {
+            throw new Error(`Replacement ${i + 1}: insertText is required for "${replacement.type}" type`);
+          }
+        } else if (replacement.type === 'string' || replacement.type === 'regex') {
+          if (!replacement.searchFor) {
+            throw new Error(`Replacement ${i + 1}: searchFor is required for "${replacement.type}" type`);
+          }
+          if (!replacement.replaceWith) {
+            throw new Error(`Replacement ${i + 1}: replaceWith is required for "${replacement.type}" type`);
+          }
+        }
+      }
+
+      // Emit progress: starting replacements
       emitToolProgress(this.name, {
         percentage: 10,
-        operation: `Replacing string in ${path.basename(filePath)}...`,
+        operation: `Processing ${replacements.length} replacement(s) in ${path.basename(filePath)}...`,
         details: `Reading file: ${filePath}`
       });
 
       // Read file content
       const content = await fs.readFile(resolvedPath, 'utf-8');
+      const lines = content.split('\n');
+      let modifiedContent = content;
+      let totalReplacements = 0;
 
-      // Count occurrences before replacement
-      const occurrences = (content.match(new RegExp(this.escapeRegex(searchFor), 'g')) || []).length;
+      // Separate different operation types
+      const lineReplacements = replacements
+        .filter(r => r.type === 'lines')
+        .map(r => ({
+          startLine: r.startLine,
+          endLine: r.endLine,
+          replaceWith: r.replaceWith!
+        }));
+      const insertOperations = replacements
+        .filter(r => r.type === 'insert_before' || r.type === 'insert_after')
+        .map(r => ({
+          type: r.type,
+          lineNumber: r.lineNumber,
+          insertText: r.insertText
+        }));
+      const stringRegexReplacements = replacements.filter(r => r.type === 'string' || r.type === 'regex');
 
-      if (occurrences === 0) {
-        emitToolProgress(this.name, {
-          percentage: 100,
-          operation: `No matches found`,
-          details: `String "${searchFor.substring(0, 50)}${searchFor.length > 50 ? '...' : ''}" not found in file`
-        });
-        return `No occurrences found: The string "${searchFor}" was not found in ${filePath}`;
+      // Process line-based replacements and insertions using chunk-based approach
+      if (lineReplacements.length > 0 || insertOperations.length > 0) {
+        modifiedContent = this.applyChunkBasedOperations(lines, lineReplacements, insertOperations);
+        totalReplacements += lineReplacements.length + insertOperations.length;
       }
 
-      // Emit progress: replacing
-      emitToolProgress(this.name, {
-        percentage: 50,
-        operation: `Replacing ${occurrences} occurrence(s)...`,
-        details: `Found ${occurrences} match(es)`
-      });
+      // Process string and regex replacements
+      logger.info('\n🔤 STRING/REGEX REPLACEMENTS DEBUG');
+      logger.info('📊 String/regex replacements to process:', stringRegexReplacements.length);
 
-      // Perform replacement
-      const newContent = content.replace(new RegExp(this.escapeRegex(searchFor), 'g'), replaceWith);
+      for (let i = 0; i < stringRegexReplacements.length; i++) {
+        const replacement = stringRegexReplacements[i];
+        logger.info(`\n🔍 Processing ${replacement.type} replacement ${i + 1}:`);
+        logger.info(`   Search for: "${replacement.searchFor}"`);
+        logger.info(`   Replace with: "${replacement.replaceWith}"`);
 
-      // Write back to file
-      await fs.writeFile(resolvedPath, newContent, 'utf-8');
+        const searchPattern = replacement.type === 'regex'
+          ? new RegExp(replacement.searchFor!, 'g')
+          : new RegExp(this.escapeRegex(replacement.searchFor!), 'g');
+
+        const matches = (modifiedContent.match(searchPattern) || []).length;
+        logger.info(`   Found ${matches} match(es)`);
+
+        if (matches > 0) {
+          modifiedContent = modifiedContent.replace(searchPattern, replacement.replaceWith!);
+          totalReplacements += matches;
+          logger.info(`   ✅ Applied ${matches} replacement(s)`);
+        } else {
+          logger.info(`   ⚠️ No matches found for this pattern`);
+        }
+      }
 
       // Emit progress: completed
       emitToolProgress(this.name, {
         percentage: 100,
-        operation: `Replacement completed`,
-        details: `Replaced ${occurrences} occurrence(s)`
+        operation: `Replacements completed`,
+        details: `Applied ${totalReplacements} change(s) across ${replacements.length} replacement(s)`
       });
 
-      return `Successfully replaced ${occurrences} occurrence(s) of "${searchFor.substring(0, 50)}${searchFor.length > 50 ? '...' : ''}" in ${filePath}`;
+      // Only write if there were changes
+      if (modifiedContent !== content) {
+        await fs.writeFile(resolvedPath, modifiedContent, 'utf-8');
+
+        logger.info('\n🎉 REPLACE_IN_FILE SUMMARY');
+        logger.info('✅ File successfully modified');
+        logger.info('📊 Total replacement operations:', replacements.length);
+        logger.info('🔄 Total individual changes:', totalReplacements);
+        logger.info('📏 Original content length:', content.length);
+        logger.info('📏 Final content length:', modifiedContent.length);
+        logger.info('📄 File written to:', resolvedPath);
+
+        return `Successfully applied ${replacements.length} replacement operation(s) with ${totalReplacements} total changes in ${filePath}`;
+      } else {
+        logger.info('\n⚠️ REPLACE_IN_FILE RESULT: No changes made');
+        logger.info('📊 Replacement operations processed:', replacements.length);
+        logger.info('🔄 Total matches found: 0');
+
+        return `No changes made to ${filePath} - all replacement patterns resulted in 0 matches`;
+      }
     } catch (error) {
-      return `Error replacing string: ${error instanceof Error ? error.message : String(error)}`;
+      return `Error performing replacements: ${error instanceof Error ? error.message : String(error)}`;
     }
+  }
+
+  /**
+   * Apply line-based replacements and insertions using chunk-based approach to avoid line shifting issues
+   */
+  private applyChunkBasedOperations(
+    lines: string[],
+    lineReplacements: Array<{startLine?: number, endLine?: number, replaceWith: string}>,
+    insertOperations: Array<{type: string, lineNumber?: number, insertText?: string}>
+  ): string {
+    logger.info('\n📐 CHUNK-BASED PROCESSING DEBUG');
+    logger.info('📏 Original file lines:', lines.length);
+    logger.info('🔄 Line replacements to process:', lineReplacements.length);
+    logger.info('📝 Insert operations to process:', insertOperations.length);
+
+    // Validate and filter line replacements
+    const validReplacements = lineReplacements
+      .filter(r => r.startLine !== undefined && r.endLine !== undefined)
+      .map(r => ({
+        startLine: r.startLine!,
+        endLine: r.endLine!,
+        replaceWith: r.replaceWith
+      }))
+      .filter(r => r.startLine > 0 && r.endLine >= r.startLine && r.endLine <= lines.length);
+
+    logger.info('✅ Valid replacements after filtering:', validReplacements.length);
+
+    // Validate and filter insert operations
+    const validInserts = insertOperations
+      .filter(r => r.lineNumber !== undefined && r.insertText !== undefined)
+      .map(r => ({
+        type: r.type as 'insert_before' | 'insert_after',
+        lineNumber: r.lineNumber!,
+        insertText: r.insertText!
+      }))
+      .filter(r => r.lineNumber > 0 && r.lineNumber <= lines.length);
+
+    logger.info('✅ Valid insert operations after filtering:', validInserts.length);
+
+    if (validReplacements.length === 0 && validInserts.length === 0) {
+      logger.info('⚠️ No valid operations found, returning original content');
+      return lines.join('\n');
+    }
+
+    // Sort replacements by startLine to process in order
+    validReplacements.sort((a, b) => a.startLine - b.startLine);
+
+    // Check for overlapping replacements
+    for (let i = 1; i < validReplacements.length; i++) {
+      const prev = validReplacements[i - 1];
+      const curr = validReplacements[i];
+      if (curr.startLine <= prev.endLine) {
+        throw new Error(`Overlapping line replacements: [${prev.startLine}-${prev.endLine}] and [${curr.startLine}-${curr.endLine}]`);
+      }
+    }
+
+    // Create boundary points: start of file, start/end of each replacement, end of file
+    const boundaries = new Set<number>();
+    boundaries.add(1); // Start of file
+    boundaries.add(lines.length + 1); // End of file (beyond last line)
+
+    for (const replacement of validReplacements) {
+      boundaries.add(replacement.startLine);
+      boundaries.add(replacement.endLine + 1); // End boundary is after the last line to replace
+    }
+
+    // Add boundaries for insert operations
+    for (const insert of validInserts) {
+      if (insert.type === 'insert_before') {
+        boundaries.add(insert.lineNumber); // Insert before this line
+      } else { // insert_after
+        boundaries.add(insert.lineNumber + 1); // Insert after this line
+      }
+    }
+
+    const sortedBoundaries = Array.from(boundaries).sort((a, b) => a - b);
+
+    logger.info('🔢 Boundaries created:', sortedBoundaries);
+    logger.info('🧩 Creating chunks between boundaries...');
+
+    // Create chunks between boundaries
+    interface FileChunk {
+      startLine: number;
+      endLine: number;
+      content: string;
+      shouldReplace: boolean;
+      replacementContent?: string;
+      insertBefore?: string;
+      insertAfter?: string;
+    }
+
+    const chunks: FileChunk[] = [];
+
+    for (let i = 0; i < sortedBoundaries.length - 1; i++) {
+      const startLine = sortedBoundaries[i];
+      const endLine = sortedBoundaries[i + 1] - 1;
+
+      // Skip empty ranges
+      if (startLine > lines.length || endLine < startLine) {
+        continue;
+      }
+
+      // Extract original content for this chunk
+      const chunkLines = lines.slice(startLine - 1, Math.min(endLine, lines.length));
+      const content = chunkLines.join('\n');
+
+      // Check if this chunk should be replaced
+      const replacement = validReplacements.find(r =>
+        r.startLine === startLine && r.endLine === endLine
+      );
+
+      // Check for insert operations at this position
+      const insertBefore = validInserts.find(r =>
+        r.type === 'insert_before' && r.lineNumber === startLine
+      );
+      // For insert_after, we want to insert after the last line of this chunk
+      const insertAfter = validInserts.find(r =>
+        r.type === 'insert_after' && r.lineNumber === Math.min(endLine, lines.length)
+      );
+
+      chunks.push({
+        startLine,
+        endLine: Math.min(endLine, lines.length),
+        content,
+        shouldReplace: !!replacement,
+        replacementContent: replacement?.replaceWith,
+        insertBefore: insertBefore?.insertText,
+        insertAfter: insertAfter?.insertText
+      });
+    }
+
+    logger.info(`📦 Created ${chunks.length} chunks:`);
+    chunks.forEach((chunk, index) => {
+      logger.info(`  ${index + 1}. Lines ${chunk.startLine}-${chunk.endLine} | Replace: ${chunk.shouldReplace} | Content: "${chunk.content.substring(0, 30)}${chunk.content.length > 30 ? '...' : ''}"`);
+    });
+
+    // Build final content by concatenating chunks
+    const finalParts: string[] = [];
+    let replacedChunks = 0;
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+
+      // Add insert_before content
+      if (chunk.insertBefore) {
+        finalParts.push(chunk.insertBefore);
+        logger.info(`📝 Chunk ${i + 1}: INSERTED BEFORE line ${chunk.startLine}`);
+      }
+
+      if (chunk.shouldReplace) {
+        // Use replacement content
+        finalParts.push(chunk.replacementContent!);
+        replacedChunks++;
+        logger.info(`🔄 Chunk ${i + 1}: REPLACED lines ${chunk.startLine}-${chunk.endLine}`);
+      } else {
+        // Use original content
+        finalParts.push(chunk.content);
+        logger.info(`📝 Chunk ${i + 1}: KEPT lines ${chunk.startLine}-${chunk.endLine}`);
+      }
+
+      // Add insert_after content
+      if (chunk.insertAfter) {
+        finalParts.push(chunk.insertAfter);
+        logger.info(`📝 Chunk ${i + 1}: INSERTED AFTER line ${chunk.endLine}`);
+      }
+
+      // Add newline separator between chunks (except after the last chunk)
+      if (i < chunks.length - 1 && chunk.content.length > 0) {
+        // Only add newline if the current chunk has content and isn't the last
+        const nextChunk = chunks[i + 1];
+        if (nextChunk.content.length > 0 || nextChunk.shouldReplace) {
+          finalParts.push('\n');
+        }
+      }
+    }
+
+    const finalResult = finalParts.join('');
+    logger.info(`✅ Chunk processing complete: ${replacedChunks} chunks replaced`);
+    logger.info(`📏 Final result lines: ${finalResult.split('\n').length}`);
+
+    return finalResult;
   }
 
   /**
@@ -862,10 +1166,26 @@ export async function createSystemTools(config: CodeMieConfig): Promise<Structur
     // Basic file system tools
     tools.push(new ReadFileTool(config.workingDirectory));
     tools.push(new WriteFileTool(config.workingDirectory));
-    tools.push(new ReplaceStringTool(config.workingDirectory));
     tools.push(new ListDirectoryTool(config.workingDirectory, config.directoryFilters));
-    tools.push(new GlobTool(config.workingDirectory));
-    tools.push(new GrepTool(config.workingDirectory));
+
+    // Conditionally add new tools based on environment variable
+    // Set CODEMIE_DISABLE_NEW_TOOLS=true to test with old tools only
+    const disableNewTools = process.env.CODEMIE_DISABLE_NEW_TOOLS === 'true';
+
+    if (!disableNewTools) {
+      // New token-efficient tools (added in commit 6accd3d)
+      tools.push(new ReplaceInFileTool(config.workingDirectory));
+      tools.push(new GlobTool(config.workingDirectory));
+      tools.push(new GrepTool(config.workingDirectory));
+
+      if (config.debug) {
+        logger.debug('New tools enabled: replace_in_file, glob, grep');
+      }
+    } else {
+      if (config.debug) {
+        logger.debug('New tools disabled via CODEMIE_DISABLE_NEW_TOOLS environment variable');
+      }
+    }
 
     // Command execution tool
     tools.push(new ExecuteCommandTool(config.workingDirectory, config.timeout));
@@ -906,15 +1226,15 @@ export async function createSystemTools(config: CodeMieConfig): Promise<Structur
 
 /**
  * Get available tool names and descriptions
+ * Respects CODEMIE_DISABLE_NEW_TOOLS environment variable
  */
 export function getToolSummary(): Array<{ name: string; description: string }> {
-  return [
+  const disableNewTools = process.env.CODEMIE_DISABLE_NEW_TOOLS === 'true';
+
+  const baseTools = [
     { name: 'read_file', description: 'Read the contents of a file from the filesystem' },
     { name: 'write_file', description: 'Write content to a file in the filesystem' },
-    { name: 'replace_string', description: 'Replace all occurrences of a string in a file. This is more token-efficient than write_file when making small changes.' },
     { name: 'list_directory', description: 'List files and directories in a given path, automatically filtering out common ignore patterns (node_modules, .git, build artifacts, etc.)' },
-    { name: 'glob', description: 'Find files matching a glob pattern (e.g., "*.ts", "**/*.test.ts", "src/**/*.js"). Supports * (any chars) and ** (any directories).' },
-    { name: 'grep', description: 'Search for text patterns within files. Can search in specific files or recursively in directories. Returns matching lines with file paths and line numbers.' },
     { name: 'execute_command', description: 'Execute a shell command in the working directory' },
     { name: 'write_todos', description: 'Create or update a structured todo list for planning and progress tracking' },
     { name: 'update_todo_status', description: 'Update the status of a specific todo by index' },
@@ -922,4 +1242,12 @@ export function getToolSummary(): Array<{ name: string; description: string }> {
     { name: 'clear_todos', description: 'Clear all todos from the list' },
     { name: 'show_todos', description: 'Display the current todo list with progress information' }
   ];
+
+  const newTools = [
+    { name: 'replace_in_file', description: 'Perform multiple replacements/insertions in a single file. Supports: line replacements, insert_before/insert_after operations, string/regex replacements. PREFER line-based operations for precision. Much more token-efficient than multiple calls.' },
+    { name: 'glob', description: 'Find files matching a glob pattern (e.g., "*.ts", "**/*.test.ts", "src/**/*.js"). Supports * (any chars) and ** (any directories).' },
+    { name: 'grep', description: 'Search for text patterns within files. Can search in specific files or recursively in directories. Returns matching lines with file paths and line numbers.' }
+  ];
+
+  return disableNewTools ? baseTools : [...baseTools, ...newTools];
 }

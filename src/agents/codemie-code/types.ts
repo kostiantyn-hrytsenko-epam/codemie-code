@@ -91,6 +91,9 @@ export interface ToolMetadata {
   /** Number of replacements made (for replace_string tool) */
   replaceCount?: number;
 
+  /** Number of replacement operations performed (for replace_in_file tool) */
+  replacementCount?: number;
+
   /** Data processing metrics */
   dataMetrics?: {
     /** Amount of data read/processed (in bytes) */
