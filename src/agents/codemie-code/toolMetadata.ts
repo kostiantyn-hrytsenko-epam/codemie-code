@@ -30,6 +30,15 @@ export function extractToolMetadata(
       case 'execute_command':
         return extractExecuteCommandMetadata(result, toolArgs);
 
+      case 'glob':
+        return extractGlobMetadata(result, toolArgs);
+
+      case 'grep':
+        return extractGrepMetadata(result, toolArgs);
+
+      case 'replace_string':
+        return extractReplaceStringMetadata(result, toolArgs);
+
       default:
         return undefined;
     }
@@ -273,6 +282,150 @@ function extractExecuteCommandMetadata(result: string, toolArgs?: Record<string,
 }
 
 /**
+ * Extract metadata from glob tool results
+ */
+function extractGlobMetadata(result: string, toolArgs?: Record<string, any>): ToolMetadata {
+  const isError = result.toLowerCase().startsWith('error');
+
+  if (isError) {
+    return {
+      success: false,
+      errorMessage: result,
+      pattern: toolArgs?.pattern
+    };
+  }
+
+  // Parse successful result: "Found {count} file(s) matching "{pattern}":\n{files}"
+  const pattern = toolArgs?.pattern;
+  const noFilesMatch = result.includes('No files found');
+
+  if (noFilesMatch) {
+    return {
+      success: true,
+      pattern,
+      fileCount: 0,
+      contentPreview: 'No files found'
+    };
+  }
+
+  // Extract file count
+  const countMatch = result.match(/Found (\d+) file/);
+  const fileCount = countMatch ? parseInt(countMatch[1], 10) : 0;
+
+  // Extract file list
+  const lines = result.split('\n').filter(line => line.trim() && !line.startsWith('Found'));
+  const files = lines.map(line => line.trim().replace(/^ {2}/, '')).filter(f => f.length > 0);
+
+  // Create preview (first few files)
+  let contentPreview = '';
+  if (files.length > 0) {
+    const previewFiles = files.slice(0, 10);
+    contentPreview = previewFiles.join(', ');
+    if (files.length > 10) {
+      contentPreview += ` +${files.length - 10} more`;
+    }
+  } else {
+    contentPreview = 'No files found';
+  }
+
+  return {
+    success: true,
+    pattern,
+    fileCount,
+    contentPreview
+  };
+}
+
+/**
+ * Extract metadata from grep tool results
+ */
+function extractGrepMetadata(result: string, toolArgs?: Record<string, any>): ToolMetadata {
+  const isError = result.toLowerCase().startsWith('error');
+
+  if (isError) {
+    return {
+      success: false,
+      errorMessage: result,
+      pattern: toolArgs?.pattern
+    };
+  }
+
+  const pattern = toolArgs?.pattern;
+  const noMatches = result.includes('No matches found');
+
+  if (noMatches) {
+    return {
+      success: true,
+      pattern,
+      matchCount: 0,
+      contentPreview: 'No matches found'
+    };
+  }
+
+  // Extract matches (format: "file:line: content")
+  const lines = result.split('\n').filter(line => line.trim());
+  const matches = lines.filter(line => line.includes(':'));
+
+  // Count matches
+  const matchCount = matches.length;
+
+  // Create preview (first few matches)
+  let contentPreview = '';
+  if (matches.length > 0) {
+    const previewMatches = matches.slice(0, 5);
+    contentPreview = previewMatches.join('\n');
+    if (matches.length > 5) {
+      contentPreview += `\n... and ${matches.length - 5} more matches`;
+    }
+  } else {
+    contentPreview = 'No matches found';
+  }
+
+  return {
+    success: true,
+    pattern,
+    matchCount,
+    contentPreview
+  };
+}
+
+/**
+ * Extract metadata from replace_string tool results
+ */
+function extractReplaceStringMetadata(result: string, toolArgs?: Record<string, any>): ToolMetadata {
+  const isError = result.toLowerCase().startsWith('error');
+
+  if (isError) {
+    return {
+      success: false,
+      errorMessage: result,
+      filePath: toolArgs?.filePath
+    };
+  }
+
+  const filePath = toolArgs?.filePath;
+  const noOccurrences = result.includes('No occurrences found');
+
+  if (noOccurrences) {
+    return {
+      success: true,
+      filePath,
+      replaceCount: 0
+    };
+  }
+
+  // Parse successful result: "Successfully replaced {count} occurrence(s) of "{searchFor}" in {filePath}"
+  const countMatch = result.match(/replaced (\d+) occurrence/);
+  const replaceCount = countMatch ? parseInt(countMatch[1], 10) : 0;
+
+  return {
+    success: true,
+    filePath,
+    replaceCount
+  };
+}
+
+/**
  * Format tool metadata for display
  */
 export function formatToolMetadata(toolName: string, metadata: ToolMetadata): string {
@@ -308,6 +461,27 @@ export function formatToolMetadata(toolName: string, metadata: ToolMetadata): st
     case 'execute_command': {
       const cmd = metadata.command ? metadata.command.split(' ')[0] : 'command';
       baseMessage = `✓ Executed ${cmd}`;
+      break;
+    }
+
+    case 'glob': {
+      const pattern = metadata.pattern || 'pattern';
+      const count = metadata.fileCount || 0;
+      baseMessage = `✓ Found ${count} file(s) matching "${pattern}"`;
+      break;
+    }
+
+    case 'grep': {
+      const pattern = metadata.pattern || 'pattern';
+      const count = metadata.matchCount || 0;
+      baseMessage = `✓ Found ${count} match(es) for "${pattern}"`;
+      break;
+    }
+
+    case 'replace_string': {
+      const fileName = metadata.filePath ? path.basename(metadata.filePath) : 'file';
+      const count = metadata.replaceCount || 0;
+      baseMessage = `✓ Replaced ${count} occurrence(s) in ${fileName}`;
       break;
     }
 

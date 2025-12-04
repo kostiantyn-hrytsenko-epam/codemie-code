@@ -855,7 +855,7 @@ export class CodeMieTerminalUI {
    */
   private shouldShowDetails(toolName: string): boolean {
     // Show details for these tools when they have interesting information
-    return ['read_file', 'list_directory', 'execute_command'].includes(toolName);
+    return ['read_file', 'list_directory', 'execute_command', 'glob', 'grep', 'replace_string'].includes(toolName);
   }
 
   /**
@@ -896,6 +896,31 @@ export class CodeMieTerminalUI {
       case 'execute_command':
         if (metadata.outputPreview && metadata.outputPreview !== 'No output') {
           details = chalk.white(`Output:\n${metadata.outputPreview}`);
+        }
+        break;
+
+      case 'glob':
+        if (metadata.contentPreview && metadata.contentPreview !== 'No files found') {
+          const files = metadata.contentPreview.split(', ');
+          if (files.length > 0) {
+            details = chalk.white(`Found ${metadata.fileCount || files.length} file(s):\n${files.map(f => `  ${f}`).join('\n')}`);
+          }
+        }
+        break;
+
+      case 'grep':
+        if (metadata.contentPreview && metadata.contentPreview !== 'No matches found') {
+          const matches = metadata.contentPreview.split('\n').slice(0, 5);
+          details = chalk.white(`Found ${metadata.matchCount || matches.length} match(es):\n${matches.map(m => `  ${m}`).join('\n')}`);
+          if (metadata.matchCount && metadata.matchCount > 5) {
+            details += chalk.gray(`\n  ... and ${metadata.matchCount - 5} more`);
+          }
+        }
+        break;
+
+      case 'replace_string':
+        if (metadata.replaceCount !== undefined) {
+          details = chalk.white(`Replaced ${metadata.replaceCount} occurrence(s)`);
         }
         break;
     }
@@ -1247,6 +1272,9 @@ export class CodeMieTerminalUI {
       'list_directory': 'Exploring',
       'read_file': 'Reading',
       'execute_command': 'Executing',
+      'glob': 'Searching files',
+      'grep': 'Searching content',
+      'replace_string': 'Replacing',
       'llm_analysis': 'Analyzing',
       'llm_plan_generation': 'Generating Plan',
       'plan_validation': 'Validating',

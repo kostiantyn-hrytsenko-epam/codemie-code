@@ -82,6 +82,15 @@ export interface ToolMetadata {
   /** Token usage for the LLM reasoning that led to this tool call */
   tokenUsage?: TokenUsage;
 
+  /** Search pattern (for glob/grep tools) */
+  pattern?: string;
+
+  /** Number of matches found (for grep tool) */
+  matchCount?: number;
+
+  /** Number of replacements made (for replace_string tool) */
+  replaceCount?: number;
+
   /** Data processing metrics */
   dataMetrics?: {
     /** Amount of data read/processed (in bytes) */

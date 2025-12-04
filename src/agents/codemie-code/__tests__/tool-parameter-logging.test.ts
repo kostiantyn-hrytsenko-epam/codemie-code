@@ -4,7 +4,7 @@
  * Tests to verify that tool parameters are correctly logged during agent execution
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 describe('Tool Parameter Logging', () => {
   let consoleLogSpy: any;
@@ -48,7 +48,10 @@ describe('Tool Parameter Logging', () => {
         { name: 'read_file', args: { filePath: 'package.json' } },
         { name: 'write_file', args: { filePath: 'output.txt', content: 'test content' } },
         { name: 'execute_command', args: { command: 'npm test' } },
-        { name: 'list_directory', args: { directoryPath: 'src/', showAll: false } }
+        { name: 'list_directory', args: { directoryPath: 'src/', showAll: false } },
+        { name: 'glob', args: { pattern: '*.ts', maxResults: 100 } },
+        { name: 'grep', args: { pattern: 'function', caseSensitive: false } },
+        { name: 'replace_string', args: { filePath: 'src/index.ts', searchFor: 'old', replaceWith: 'new' } }
       ];
 
       // Store all tool args
@@ -57,11 +60,14 @@ describe('Tool Parameter Logging', () => {
       });
 
       // Verify all are stored correctly
-      expect(toolCallArgs.size).toBe(4);
+      expect(toolCallArgs.size).toBe(7);
       expect(toolCallArgs.get('read_file')).toEqual({ filePath: 'package.json' });
       expect(toolCallArgs.get('write_file')).toEqual({ filePath: 'output.txt', content: 'test content' });
       expect(toolCallArgs.get('execute_command')).toEqual({ command: 'npm test' });
       expect(toolCallArgs.get('list_directory')).toEqual({ directoryPath: 'src/', showAll: false });
+      expect(toolCallArgs.get('glob')).toEqual({ pattern: '*.ts', maxResults: 100 });
+      expect(toolCallArgs.get('grep')).toEqual({ pattern: 'function', caseSensitive: false });
+      expect(toolCallArgs.get('replace_string')).toEqual({ filePath: 'src/index.ts', searchFor: 'old', replaceWith: 'new' });
     });
 
     it('should clean up tool args after retrieval', () => {
@@ -242,6 +248,54 @@ describe('Tool Parameter Logging', () => {
       expect(toolArgs.directoryPath).toBe('src/cli/commands');
       expect(toolArgs.showAll).toBe(false);
       expect(toolArgs.includeHidden).toBe(true);
+    });
+
+    it('should extract pattern and options from glob tool args', () => {
+      const toolArgs = {
+        pattern: '*.ts',
+        directoryPath: 'src',
+        maxResults: 50
+      };
+      
+      expect(toolArgs).toHaveProperty('pattern');
+      expect(toolArgs).toHaveProperty('directoryPath');
+      expect(toolArgs).toHaveProperty('maxResults');
+      expect(toolArgs.pattern).toBe('*.ts');
+      expect(toolArgs.directoryPath).toBe('src');
+      expect(toolArgs.maxResults).toBe(50);
+    });
+
+    it('should extract pattern and options from grep tool args', () => {
+      const toolArgs = {
+        pattern: 'function',
+        filePath: 'src/index.ts',
+        caseSensitive: true,
+        maxResults: 100
+      };
+      
+      expect(toolArgs).toHaveProperty('pattern');
+      expect(toolArgs).toHaveProperty('filePath');
+      expect(toolArgs).toHaveProperty('caseSensitive');
+      expect(toolArgs).toHaveProperty('maxResults');
+      expect(toolArgs.pattern).toBe('function');
+      expect(toolArgs.filePath).toBe('src/index.ts');
+      expect(toolArgs.caseSensitive).toBe(true);
+      expect(toolArgs.maxResults).toBe(100);
+    });
+
+    it('should extract parameters from replace_string tool args', () => {
+      const toolArgs = {
+        filePath: 'src/utils.ts',
+        searchFor: 'oldText',
+        replaceWith: 'newText'
+      };
+      
+      expect(toolArgs).toHaveProperty('filePath');
+      expect(toolArgs).toHaveProperty('searchFor');
+      expect(toolArgs).toHaveProperty('replaceWith');
+      expect(toolArgs.filePath).toBe('src/utils.ts');
+      expect(toolArgs.searchFor).toBe('oldText');
+      expect(toolArgs.replaceWith).toBe('newText');
     });
   });
 

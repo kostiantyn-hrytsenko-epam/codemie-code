@@ -125,7 +125,7 @@ You are gathering context about this project for planning purposes. Please perfo
 4. **Analyze Dependencies**: If there's a package.json, analyze the dependencies
 5. **Understand Project Type**: Determine what type of project this is and what technologies it uses
 
-Please work systematically and call the appropriate tools (list_directory, read_file) to gather comprehensive information about this project. Focus on understanding:
+Please work systematically and call the appropriate tools (list_directory, read_file, glob, grep, replace_string) to gather comprehensive information about this project. Focus on understanding:
 - Project type and main technologies
 - Key source files and their purposes
 - Dependencies and configuration
@@ -156,6 +156,12 @@ Start by exploring the root directory, then identify and read the most important
           paramDetails = `(${toolArgs.directoryPath || '.'})`;
         } else if (toolName === 'execute_command' && toolArgs.command) {
           paramDetails = `(${toolArgs.command.substring(0, 30)}${toolArgs.command.length > 30 ? '...' : ''})`;
+        } else if (toolName === 'glob' && toolArgs.pattern) {
+          paramDetails = `(${toolArgs.pattern})`;
+        } else if (toolName === 'grep' && toolArgs.pattern) {
+          paramDetails = `(${toolArgs.pattern})`;
+        } else if (toolName === 'replace_string' && toolArgs.filePath) {
+          paramDetails = `(${toolArgs.filePath})`;
         } else if (Object.keys(toolArgs).length > 0) {
           // Show first parameter for other tools
           const firstParam = Object.values(toolArgs)[0];
@@ -865,6 +871,9 @@ Now create your context-aware plan using write_todos():`;
       'read_file': 'Reading files',
       'execute_command': 'Running commands',
       'write_file': 'Writing files',
+      'replace_string': 'Replacing strings',
+      'glob': 'Finding files',
+      'grep': 'Searching content',
       'write_todos': 'Creating todos',
       'update_todo_status': 'Updating todos',
       'append_todo': 'Adding todos',
